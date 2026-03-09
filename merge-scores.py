@@ -397,33 +397,72 @@ def remove_vboxes(staff: Optional[ET.Element]) -> int:
     return removed
 
 
-def move_vboxes_from_old_first(score: ET.Element):
-    """
-    Move staff-level VBoxes from the previous first staff to the new first staff,
-    preserving their relative order among staff-level elements.
-    This matches the user's original intended behavior:
-      - VBoxes are system-level, not measure-level
-      - They appear before measures, in the order they originally existed
-    """
+def measure_index_of_node(staff: ET.Element, node: ET.Element) -> int:
+    count = 0
+    for ch in staff:
+        if ch is node:
+            break
+        if ch.tag == "Measure":
+            count += 1
+    return count
 
-    staffs = [el for el in score if el.tag == "Staff" and "id" in el.attrib]
-    if not staffs:
+
+def insert_before_measure_ordinal(first_staff: ET.Element, m: int, vb: ET.Element):
+    if m <= 0:
+        for i, ch in enumerate(list(first_staff)):
+            if ch.tag == "Measure":
+                first_staff.insert(i, vb)
+                return
+        first_staff.append(vb)
         return
-    new_first = staffs[0]
+    seen = 0
+    for i, ch in enumerate(list(first_staff)):
+        if ch.tag == "Measure":
+            if seen == m:
+                first_staff.insert(i, vb)
+                return
+            seen += 1
+    first_staff.append(vb)
 
-    # Collect (VBox, original_index) pairs
-    old_first_staff = [staff for staff in staffs if staff.find("VBox") is not None][0]
-    indexed_vboxes = [(i, ch) for i, ch in enumerate(list(old_first_staff)) if ch.tag == "VBox"]
-    if not indexed_vboxes:
+
+def relocate_vboxes_to_first_staff_by_measure_ordinal(score: ET.Element):
+    """
+    Collect all VBoxes from all score-level staves and reinsert them into the
+    final first staff (current score order), preserving *measure ordinal*:
+      - If a VBox had k measures before it on its original staff, insert it
+        before the k-th measure of the first staff (k=0 => before first measure).
+      - If k >= number of measures in the first staff, append at the end.
+
+    Rationale:
+      - During donor append you keep VBoxes on the same staff as their donor content,
+        so mid-section VBoxes stay adjacent to the correct measure boundary.
+      - After all merges and any reorders/renumbering, you run this pass once to move
+        every VBox onto staff 1 (so they are visible) without drifting by one measure.
+    """
+    # Score-level staves, in current (final) order
+    staves = [el for el in score if el.tag == "Staff" and "id" in el.attrib]
+    if not staves:
+        return
+    first_staff = staves[0]
+
+    vboxes = []
+    for staff in staves:
+        for ch in list(staff):
+            if ch.tag == "VBox":
+                vboxes.append((measure_index_of_node(staff, ch), ch, staff))
+
+    if not vboxes:
         return
 
-    # Remove them from old
-    for _, vb in indexed_vboxes:
-        old_first_staff.remove(vb)
+    for _, vb, src_staff in vboxes:
+        try:
+            src_staff.remove(vb)
+        except Exception:
+            pass
 
-    # Insert vboxes in order
-    for offset, vb in indexed_vboxes:
-        new_first.insert(offset, vb)
+    vboxes_sorted = sorted(enumerate(vboxes), key=lambda t: (t[1][0], t[0]))
+    for _, (m_idx, vb, _src) in vboxes_sorted:
+        insert_before_measure_ordinal(first_staff, m_idx, vb)
 
 
 # --------------------------
@@ -649,12 +688,6 @@ def main():
             donor_first_name = donor_names_order[0] if donor_names_order else None
             donor_first_staff = donor_name_to_staff.get(donor_first_name) if donor_first_name else None
 
-            if primary_staff is not None and donor_first_staff is not None:
-                for ch in donor_first_staff:
-                    if ch.tag == "VBox":
-                        primary_staff.append(deepcopy(ch))
-                        break
-
             base_names = set(keys_order)
             new_voices = [nm for nm in donor_names_order if nm not in base_names]
             for nm in new_voices:
@@ -683,6 +716,8 @@ def main():
                     ds = donor_name_to_staff[nm]
                     for ch in list(ds):
                         if ch.tag == "VBox":
+                            if primary_staff is not None:
+                                primary_staff.append(deepcopy(ch))
                             continue
                         bs.append(deepcopy(ch))
                 else:
@@ -692,8 +727,8 @@ def main():
         score = get_score(base_root)
         reorder_staves_to_match_parts_soloists_first(score)
         renumber_staff_ids_sequential(score)
-        move_vboxes_from_old_first(score)
         reorder_parts_inplace(score)
+        relocate_vboxes_to_first_staff_by_measure_ordinal(score)
 
         buf = io.BytesIO()
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
