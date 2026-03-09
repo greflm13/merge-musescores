@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
 Merge donor .mscz into a base .mscz by appending <Staff id="n"> contents
 """
@@ -22,8 +21,6 @@ from copy import deepcopy
 # --------------------------
 # Utility
 # --------------------------
-
-
 def eprint(*args, **kw):
     print(*args, file=sys.stderr, **kw)
 
@@ -35,16 +32,9 @@ def first_mscx_name(zf: zipfile.ZipFile) -> Optional[str]:
     return None
 
 
-def read_doctype(text: str) -> Optional[str]:
-    m = re.search(r"<!DOCTYPE[^>]*>", text, flags=re.IGNORECASE | re.DOTALL)
-    return m.group(0) if m else None
-
-
 # --------------------------
 # MS4 helpers
 # --------------------------
-
-
 def get_score(root: ET.Element) -> ET.Element:
     """Return the <Score> element, accounting for <museScore> wrapper."""
     if root.tag == "Score":
@@ -69,15 +59,13 @@ def extract_longname(part: ET.Element) -> Optional[str]:
 
 def index_single_staff_parts(root: ET.Element):
     """
-    MS4 single-staff index:
-      returns:
-        name_to_part: longName -> Part element
-        name_list: order of part names as they appear
-        name_to_staff: longName -> score-level Staff
-        staff_by_id
+    Returns:
+      name_to_part: longName -> <Part>
+      final_names: order of names as appear
+      name_to_staff: longName -> score-level <Staff>
+      staff_by_id: id -> <Staff>
     """
     score = get_score(root)
-
     parts = list(score.findall("Part"))
 
     name_to_part: Dict[str, ET.Element] = {}
@@ -88,70 +76,82 @@ def index_single_staff_parts(root: ET.Element):
         if not name:
             eprint("Warning: Part without longName skipped.")
             continue
-
         templates = p.findall("Staff")
         if len(templates) > 1:
             eprint(f"Note: Part '{name}' has {len(templates)} staff templates; single-staff mode uses first only.")
-
         if name in name_to_part:
             eprint(f"Warning: Duplicate longName '{name}' in base; skipping subsequent duplicates.")
             continue
-
         name_to_part[name] = p
         name_list.append(name)
 
     # Score-level staffs
     score_staves = [s for s in score.findall("Staff") if "id" in s.attrib]
-
     n = min(len(name_list), len(score_staves))
     if n != len(name_list) or n != len(score_staves):
         eprint(f"Note: mismatch (parts={len(name_list)} staves={len(score_staves)}); using first {n} pairs.")
 
     name_to_staff: Dict[str, ET.Element] = {}
     for i in range(n):
-        nm = name_list[i]
-        st = score_staves[i]
-        name_to_staff[nm] = st
-
+        name_to_staff[name_list[i]] = score_staves[i]
     staff_by_id = {s.attrib["id"]: s for s in score_staves}
 
     # final ordering:
     final_names = [nm for nm in name_list if nm in name_to_staff]
-
     return name_to_part, final_names, name_to_staff, staff_by_id
 
 
 # --------------------------
 # Measures & placeholders
 # --------------------------
-
-
 def get_measures(staff: ET.Element) -> List[ET.Element]:
     return [ch for ch in staff if ch.tag == "Measure"]
 
 
+NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef"]
+
+
+def measure_timesig_str(ms: ET.Element, fallback_ts: str) -> str:
+    """Return the time signature that *applies to this measure* as 'N/D'.
+    If the measure carries a <TimeSig>, use it; otherwise inherit fallback_ts.
+    """
+    voice = ms.find("voice")
+    if voice is not None:
+        timesig = voice.find("TimeSig")
+        if timesig is not None:
+            N = timesig.find("sigN")
+            D = timesig.find("sigD")
+            if N is not None and D is not None and (N.text and D.text):
+                return f"{N.text}/{D.text}"
+    return fallback_ts
+
+
 def strip_measure(measure: ET.Element, timesig: str):
-    voice = measure.find("voice")
-    if voice is None:
+    voices = measure.findall("voice")
+    measure_len = measure.get("len")
+    if measure_len:
+        timesig = measure_len
+    if voices is None:
         return
-    # Strip note-ish tags
-    NOTE_TAGS = ["Chord", "Rest", "ChordRest", "Note", "lyrics", "Lyrics"]
+    # Strip note-ish tags but keep meta (TimeSig, KeySig, BarLine, Clef, etc.)
+    voice = voices[0]
     removed = True
     while removed:
         removed = False
         for parent in list(voice.iter()):
             for ch in list(parent):
-                if ch.tag in NOTE_TAGS:
+                if ch.tag not in NOTE_TAGS:
                     parent.remove(ch)
                     removed = True
+    # Insert a full-measure rest that matches the *current* timesig context
     rest = ET.Element("Rest")
-    durationtype = ET.Element("durationType")
-    durationtype.text = "measure"
-    ts = ET.Element("duration")
-    ts.text = timesig
-    rest.append(durationtype)
-    rest.append(ts)
+    dt = ET.SubElement(rest, "durationType")
+    dt.text = "measure"
+    dur = ET.SubElement(rest, "duration")
+    dur.text = timesig
     voice.append(rest)
+    for voice in voices[1:]:
+        measure.remove(voice)
 
 
 def clone_placeholder(m: ET.Element, ts: str) -> ET.Element:
@@ -238,7 +238,6 @@ def next_id(existing: Set[str]) -> str:
 
 
 def find_order(score: ET.Element) -> Optional[ET.Element]:
-    # Namespaced or not, tag endswith("Order")
     for ch in score:
         if ch.tag.endswith("Order"):
             return ch
@@ -246,37 +245,69 @@ def find_order(score: ET.Element) -> Optional[ET.Element]:
 
 
 def copy_instrument_into_order(order: ET.Element, donor_order: ET.Element, instr_id: str, longName: str):
-    """Copy donor's instrument stub into base <Order>, respecting SOLO rule."""
-    # locate donor stub
     donor_stub = None
     for it in donor_order.findall("instrument"):
         if it.get("id") == instr_id:
             donor_stub = deepcopy(it)
             break
     if donor_stub is None:
-        # fallback: create minimal stub
         donor_stub = ET.Element("instrument", {"id": instr_id})
         fam = ET.SubElement(donor_stub, "family")
         fam.set("id", "voices")
         fam.text = "Stimmen"
 
-    # find insertion point
     children = list(order)
-
-    # append at bottom, but before <soloists>, <section>, <family>, <unsorted>
     bottom_tags = {"soloists", "section", "family", "unsorted"}
     idx = len(children)
     for i, ch in enumerate(children):
-        tag = ch.tag
-        if tag in bottom_tags:
+        if ch.tag in bottom_tags:
             idx = i
             break
     order.insert(idx, donor_stub)
 
 
 # --------------------------
+# VBox handling
+# --------------------------
+
+
+def remove_vboxes(staff: Optional[ET.Element]) -> int:
+    if staff is None:
+        return 0
+    removed = 0
+    for ch in list(staff):
+        if ch.tag == "VBox":
+            staff.remove(ch)
+            removed += 1
+    return removed
+
+
+# --------------------------
 # New voice creation
 # --------------------------
+
+
+def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element]:
+    """
+    Create per-measure placeholder clones that preserve *actual* measure length.
+    Handles pickup measures by respecting <Measure len="X/Y"> if present.
+    """
+    ref_ms = get_measures(ref_staff)
+    placeholders: List[ET.Element] = []
+    current_ts = ""  # last known inherited timesig (N/D)
+
+    for m in ref_ms:
+        # Priority 1: a pickup measure or irregular bar has explicit len="X/Y"
+        if "len" in m.attrib:
+            ts = m.attrib["len"]
+        else:
+            # Priority 2: a regular measure inherits or defines real time signature
+            ts = measure_timesig_str(m, current_ts)
+
+        current_ts = ts
+        placeholders.append(clone_placeholder(m, ts))
+
+    return placeholders
 
 
 def create_new_voice(
@@ -292,66 +323,48 @@ def create_new_voice(
 
     # copy donor <Part>
     new_part = deepcopy(donor_part)
-    # assign fresh part id
     new_id = next_id({p.get("id", "0") for p in score.findall("Part")})
-    old_id = donor_part.get("id")
-    if old_id:
-        new_part.set("id", new_id)
+    new_part.set("id", new_id)
 
     # keep only first staff template
     st_templates = new_part.findall("Staff")
     for st in st_templates[1:]:
         new_part.remove(st)
 
-    # find index of last Part
+    # insert new <Part> before first score-level <Staff>
     idx = len(score)
     for i, el in enumerate(score):
-        tag = el.tag
-        if tag == "Staff":
+        if el.tag == "Staff":
             idx = i
             break
-
     score.insert(idx, new_part)
 
-    # staff for notation
+    # create a new score-level <Staff>
     new_staff = deepcopy(donor_staff)
     new_sid = next_id(used_staff_ids)
     used_staff_ids.add(new_sid)
     new_staff.set("id", new_sid)
     score.append(new_staff)
 
-    # backfill placeholders
+    # backfill placeholders ONLY (no donor measures yet) — **per measure TS**
     if primary_staff is not None:
-        ref_ms = get_measures(primary_staff)
-        donor_ms = get_measures(new_staff)
-        ts = ""
-        for ms in ref_ms:
-            voice = ms.find("voice")
-            if voice is not None:
-                timesig = voice.find("TimeSig")
-                if timesig is not None:
-                    N = timesig.find("sigN")
-                    D = timesig.find("sigD")
-                    if N is not None and D is not None:
-                        if N.text is not None and D.text is not None:
-                            ts = N.text + "/" + D.text
-                        break
-        phs = [clone_placeholder(m, ts) for m in ref_ms]
-        for dm in donor_ms:
-            new_staff.remove(dm)
-        for ph in phs:
+        placeholders = _build_placeholders_from_reference(primary_staff)
+        # wipe existing donor measures on the cloned staff
+        for dm in list(new_staff):
+            if dm.tag == "Measure":
+                new_staff.remove(dm)
+        for ph in placeholders:
             new_staff.append(ph)
-        for dm in donor_ms:
-            new_staff.append(dm)
 
-    # copy donor Order stub
+    # Ensure no VBox remains on the newly created staff; merge will place VBox once
+    remove_vboxes(new_staff)
+
+    # copy Order stub if needed
     base_order = find_order(score)
     donor_order = find_order(get_score(donor_root))
     if base_order is not None and donor_order is not None:
-        # determine instrument id from donor part's <Instrument>
         instr = donor_part.find(".//Instrument")
         instr_id = instr.get("id") if instr is not None and instr.get("id") else longName.lower().replace(" ", "_")
-        # check if base already has it
         exists = any(it.get("id") == instr_id for it in base_order.findall("instrument"))
         if not exists:
             copy_instrument_into_order(base_order, donor_order, instr_id, longName)
@@ -428,9 +441,7 @@ def write_zip_from_dir(src_dir: str, out_zip: str) -> None:
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Merge MS4 .mscz files (single-staff, strict longName, donor-ordered, Solo-at-top)."
-    )
+    ap = argparse.ArgumentParser(description="Merge MS4 .mscz files")
     ap.add_argument("-o", "--output-name", required=True)
     ap.add_argument("-D", "--output-dir", default=".")
     ap.add_argument("base")
@@ -459,9 +470,9 @@ def main():
         with zipfile.ZipFile(base_zip, "r") as z:
             z.extractall(base_dir)
             mscx_name = first_mscx_name(z)
-            if not mscx_name:
-                eprint("Base has no .mscx")
-                return 65
+        if not mscx_name:
+            eprint("Base has no .mscx")
+            return 65
 
         base_mscx = os.path.join(base_dir, mscx_name)
         raw = open(base_mscx, "rb").read()
@@ -471,11 +482,7 @@ def main():
         # base indexing
         base_name_to_part, base_names_order, base_name_to_staff, base_staff_by_id = index_single_staff_parts(base_root)
         used_staff_ids = set(base_staff_by_id.keys())
-
-        # stable final ordered list
         keys_order = list(base_names_order)
-
-        # primary staff = id="1" if exists
         primary_staff = base_staff_by_id.get("1")
 
         for donor_path in donor_list:
@@ -494,69 +501,62 @@ def main():
             donor_tree = parse_xml_lenient(donor_bytes, label)
             if donor_tree is None:
                 continue
-
             donor_root = donor_tree.getroot()
             if donor_root is None:
                 continue
+
             donor_name_to_part, donor_names_order, donor_name_to_staff, donor_staff_by_id = index_single_staff_parts(
                 donor_root
             )
 
-            # Pre-break
+            # Insert section break on last base measure before adding this donor
             if primary_staff is not None:
                 lm = last_measure(primary_staff)
                 if lm is not None:
                     insert_break(lm)
 
+            # ---- Place donor VBox BEFORE any donor measures are appended
+            donor_first_name = donor_names_order[0] if donor_names_order else None
+            donor_first_staff = donor_name_to_staff.get(donor_first_name) if donor_first_name else None
+            if primary_staff is not None and donor_first_staff is not None:
+                # Find first VBox on donor first staff
+                for ch in donor_first_staff:
+                    if ch.tag == "VBox":
+                        primary_staff.append(deepcopy(ch))
+                        break
+            # ---- end VBox placement
+
+            # New voices (create empty staves with placeholders)
             base_names = set(keys_order)
             donor_names = set(donor_name_to_staff.keys())
-
-            # NEW VOICES
             new_voices = [nm for nm in donor_names_order if nm not in base_names]
-
-            # copy new voices in donor order
             for nm in new_voices:
                 dp = donor_name_to_part[nm]
                 ds = donor_name_to_staff[nm]
-
                 new_part, new_staff = create_new_voice(base_root, donor_root, nm, dp, ds, used_staff_ids, primary_staff)
-
-                # update indexing
                 base_name_to_staff[nm] = new_staff
                 base_name_to_part[nm] = new_part
                 keys_order.append(nm)
 
-            # placeholders reference: donor first staff
-            donor_ref_staff = donor_name_to_staff[donor_names_order[0]] if donor_names_order else None
-            donor_placeholders = []
+            # Build placeholder template from donor *per-measure* TS
+            donor_ref_staff = donor_first_staff
+            donor_placeholders: List[ET.Element] = []
             if donor_ref_staff is not None:
-                ref_ms = get_measures(donor_ref_staff)
-                ts = ""
-                for ms in ref_ms:
-                    voice = ms.find("voice")
-                    if voice is not None:
-                        timesig = voice.find("TimeSig")
-                        if timesig is not None:
-                            N = timesig.find("sigN")
-                            D = timesig.find("sigD")
-                            if N is not None and D is not None:
-                                if N.text is not None and D.text is not None:
-                                    ts = N.text + "/" + D.text
-                                break
-                donor_placeholders = [clone_placeholder(m, ts) for m in ref_ms]
+                donor_placeholders = _build_placeholders_from_reference(donor_ref_staff)
 
-            # merge voices in final order
+            # Merge donor contents per voice
             for nm in keys_order:
                 bs = base_name_to_staff.get(nm)
                 if bs is None:
                     continue
-
                 if nm in donor_name_to_staff:
                     ds = donor_name_to_staff[nm]
                     for ch in list(ds):
+                        if ch.tag == "VBox":
+                            # skip here; VBox already placed once on primary_staff
+                            continue
                         bs.append(deepcopy(ch))
                 else:
-                    # missing in donor -> placeholders
                     for ph in donor_placeholders:
                         bs.append(deepcopy(ph))
 
@@ -565,14 +565,11 @@ def main():
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
         open(base_mscx, "wb").write(buf.getvalue())
         shutil.move(base_mscx, os.path.join(base_dir, f"{args.output_name}.mscx"))
-
         ensure_dir(out_dir)
         write_zip_from_dir(base_dir, out_path)
         print(f"OK: merged archive created at: {out_path}")
-
     finally:
         shutil.rmtree(work, ignore_errors=True)
-
     return 0
 
 
