@@ -40,17 +40,6 @@ def read_doctype(text: str) -> Optional[str]:
     return m.group(0) if m else None
 
 
-def inject_doctype(xml_bytes: bytes, doctype: Optional[str]) -> bytes:
-    if not doctype:
-        return xml_bytes
-    text = xml_bytes.decode("utf-8")
-    if text.startswith("<?xml"):
-        pos = text.find("?>")
-        if pos != -1:
-            return (text[: pos + 2] + "\n" + doctype + "\n" + text[pos + 2 :]).encode("utf-8")
-    return (doctype + "\n" + text).encode("utf-8")
-
-
 # --------------------------
 # MS4 helpers
 # --------------------------
@@ -141,25 +130,33 @@ def get_measures(staff: ET.Element) -> List[ET.Element]:
     return [ch for ch in staff if ch.tag == "Measure"]
 
 
-def strip_measure(measure: ET.Element):
-    # Remove <voice> entirely
-    for v in list(measure.findall("voice")):
-        measure.remove(v)
+def strip_measure(measure: ET.Element, timesig: str):
+    voice = measure.find("voice")
+    if voice is None:
+        return
     # Strip note-ish tags
     NOTE_TAGS = ["Chord", "Rest", "ChordRest", "Note", "lyrics", "Lyrics"]
     removed = True
     while removed:
         removed = False
-        for parent in list(measure.iter()):
+        for parent in list(voice.iter()):
             for ch in list(parent):
                 if ch.tag in NOTE_TAGS:
                     parent.remove(ch)
                     removed = True
+    rest = ET.Element("Rest")
+    durationtype = ET.Element("durationType")
+    durationtype.text = "measure"
+    ts = ET.Element("duration")
+    ts.text = timesig
+    rest.append(durationtype)
+    rest.append(ts)
+    voice.append(rest)
 
 
-def clone_placeholder(m: ET.Element) -> ET.Element:
+def clone_placeholder(m: ET.Element, ts: str) -> ET.Element:
     cp = deepcopy(m)
-    strip_measure(cp)
+    strip_measure(cp, ts)
     return cp
 
 
@@ -210,7 +207,7 @@ def insert_break(m: ET.Element):
 
 
 def last_measure(staff: Optional[ET.Element]) -> Optional[ET.Element]:
-    if not staff:
+    if staff is None:
         return None
     ms = get_measures(staff)
     return ms[-1] if ms else None
@@ -226,7 +223,7 @@ def next_id(existing: Set[str]) -> str:
     for x in existing:
         try:
             nums.append(int(x))
-        except:
+        except Exception:
             pass
     base = max(nums) + 1 if nums else 1
     n = base
@@ -263,30 +260,18 @@ def copy_instrument_into_order(order: ET.Element, donor_order: ET.Element, instr
         fam.set("id", "voices")
         fam.text = "Stimmen"
 
-    # SOLO AT TOP RULE
-    is_solo = longName.strip().lower() == "solo"
-
     # find insertion point
     children = list(order)
 
-    if is_solo:
-        # insert after <name> but before any instruments
-        idx = 0
-        for i, ch in enumerate(children):
-            if ch.tag == "name":
-                idx = i + 1
-                break
-        order.insert(idx, donor_stub)
-    else:
-        # append at bottom, but before <soloists>, <section>, <family>, <unsorted>
-        bottom_tags = {"soloists", "section", "family", "unsorted"}
-        idx = len(children)
-        for i, ch in enumerate(children):
-            tag = ch.tag
-            if tag in bottom_tags:
-                idx = i
-                break
-        order.insert(idx, donor_stub)
+    # append at bottom, but before <soloists>, <section>, <family>, <unsorted>
+    bottom_tags = {"soloists", "section", "family", "unsorted"}
+    idx = len(children)
+    for i, ch in enumerate(children):
+        tag = ch.tag
+        if tag in bottom_tags:
+            idx = i
+            break
+    order.insert(idx, donor_stub)
 
 
 # --------------------------
@@ -308,7 +293,7 @@ def create_new_voice(
     # copy donor <Part>
     new_part = deepcopy(donor_part)
     # assign fresh part id
-    new_id = next_id({p.get("id") for p in score.findall("Part")})
+    new_id = next_id({p.get("id", "0") for p in score.findall("Part")})
     old_id = donor_part.get("id")
     if old_id:
         new_part.set("id", new_id)
@@ -318,7 +303,15 @@ def create_new_voice(
     for st in st_templates[1:]:
         new_part.remove(st)
 
-    score.append(new_part)
+    # find index of last Part
+    idx = len(score)
+    for i, el in enumerate(score):
+        tag = el.tag
+        if tag == "Staff":
+            idx = i
+            break
+
+    score.insert(idx, new_part)
 
     # staff for notation
     new_staff = deepcopy(donor_staff)
@@ -331,7 +324,19 @@ def create_new_voice(
     if primary_staff is not None:
         ref_ms = get_measures(primary_staff)
         donor_ms = get_measures(new_staff)
-        phs = [clone_placeholder(m) for m in ref_ms]
+        ts = ""
+        for ms in ref_ms:
+            voice = ms.find("voice")
+            if voice is not None:
+                timesig = voice.find("TimeSig")
+                if timesig is not None:
+                    N = timesig.find("sigN")
+                    D = timesig.find("sigD")
+                    if N is not None and D is not None:
+                        if N.text is not None and D.text is not None:
+                            ts = N.text + "/" + D.text
+                        break
+        phs = [clone_placeholder(m, ts) for m in ref_ms]
         for dm in donor_ms:
             new_staff.remove(dm)
         for ph in phs:
@@ -460,7 +465,6 @@ def main():
 
         base_mscx = os.path.join(base_dir, mscx_name)
         raw = open(base_mscx, "rb").read()
-        doctype = read_doctype(raw.decode("utf-8", errors="ignore"))
         base_tree = ET.parse(io.BytesIO(raw))
         base_root = base_tree.getroot()
 
@@ -483,7 +487,7 @@ def main():
                         eprint(f"No .mscx in donor {label}, skipping.")
                         continue
                     donor_bytes = dz.read(dn_mscx)
-            except:
+            except Exception:
                 eprint(f"Could not read donor {label}, skipping.")
                 continue
 
@@ -492,14 +496,16 @@ def main():
                 continue
 
             donor_root = donor_tree.getroot()
+            if donor_root is None:
+                continue
             donor_name_to_part, donor_names_order, donor_name_to_staff, donor_staff_by_id = index_single_staff_parts(
                 donor_root
             )
 
             # Pre-break
-            if primary_staff:
+            if primary_staff is not None:
                 lm = last_measure(primary_staff)
-                if lm:
+                if lm is not None:
                     insert_break(lm)
 
             base_names = set(keys_order)
@@ -523,8 +529,21 @@ def main():
             # placeholders reference: donor first staff
             donor_ref_staff = donor_name_to_staff[donor_names_order[0]] if donor_names_order else None
             donor_placeholders = []
-            if donor_ref_staff:
-                donor_placeholders = [clone_placeholder(m) for m in get_measures(donor_ref_staff)]
+            if donor_ref_staff is not None:
+                ref_ms = get_measures(donor_ref_staff)
+                ts = ""
+                for ms in ref_ms:
+                    voice = ms.find("voice")
+                    if voice is not None:
+                        timesig = voice.find("TimeSig")
+                        if timesig is not None:
+                            N = timesig.find("sigN")
+                            D = timesig.find("sigD")
+                            if N is not None and D is not None:
+                                if N.text is not None and D.text is not None:
+                                    ts = N.text + "/" + D.text
+                                break
+                donor_placeholders = [clone_placeholder(m, ts) for m in ref_ms]
 
             # merge voices in final order
             for nm in keys_order:
@@ -541,17 +560,11 @@ def main():
                     for ph in donor_placeholders:
                         bs.append(deepcopy(ph))
 
-            # Post-break
-            if primary_staff:
-                lm = last_measure(primary_staff)
-                if lm:
-                    insert_break(lm)
-
         # write final
         buf = io.BytesIO()
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
-        final_data = inject_doctype(buf.getvalue(), doctype)
-        open(base_mscx, "wb").write(final_data)
+        open(base_mscx, "wb").write(buf.getvalue())
+        shutil.move(base_mscx, os.path.join(base_dir, f"{args.output_name}.mscx"))
 
         ensure_dir(out_dir)
         write_zip_from_dir(base_dir, out_path)
