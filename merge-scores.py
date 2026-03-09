@@ -21,6 +21,8 @@ from copy import deepcopy
 # --------------------------
 # Utility
 # --------------------------
+
+
 def eprint(*args, **kw):
     print(*args, file=sys.stderr, **kw)
 
@@ -35,6 +37,8 @@ def first_mscx_name(zf: zipfile.ZipFile) -> Optional[str]:
 # --------------------------
 # MS4 helpers
 # --------------------------
+
+
 def get_score(root: ET.Element) -> ET.Element:
     """Return the <Score> element, accounting for <museScore> wrapper."""
     if root.tag == "Score":
@@ -55,7 +59,7 @@ def extract_longname(part: ET.Element) -> Optional[str]:
     return None
 
 
-def index_single_staff_parts(root: ET.Element):
+def index_single_staff_parts(root: ET.Element, file: str):
     """
     Returns:
       name_to_part: longName -> <Part>
@@ -72,15 +76,17 @@ def index_single_staff_parts(root: ET.Element):
     for p in parts:
         name = extract_longname(p)
         if not name:
-            eprint("Warning: Part without longName skipped.")
+            eprint(f"Warning: Part without longName skipped. {file}")
             continue
 
         templates = p.findall("Staff")
         if len(templates) > 1:
-            eprint(f"Note: Part '{name}' has {len(templates)} staff templates; single-staff mode uses first only.")
+            eprint(
+                f"Note: Part '{name}' has {len(templates)} staff templates; single-staff mode uses first only. {file}"
+            )
 
         if name in name_to_part:
-            eprint(f"Warning: Duplicate longName '{name}' in base; skipping subsequent duplicates.")
+            eprint(f"Warning: Duplicate longName '{name}' in base; skipping subsequent duplicates. {file}")
             continue
 
         name_to_part[name] = p
@@ -89,7 +95,7 @@ def index_single_staff_parts(root: ET.Element):
     score_staves = [s for s in score.findall("Staff") if "id" in s.attrib]
     n = min(len(name_list), len(score_staves))
     if n != len(name_list) or n != len(score_staves):
-        eprint(f"Note: mismatch (parts={len(name_list)} staves={len(score_staves)}); using first {n} pairs.")
+        eprint(f"Note: mismatch (parts={len(name_list)} staves={len(score_staves)}); using first {n} pairs. {file}")
 
     name_to_staff: Dict[str, ET.Element] = {}
     for i in range(n):
@@ -104,6 +110,8 @@ def index_single_staff_parts(root: ET.Element):
 # --------------------------
 # Measures & placeholders
 # --------------------------
+
+
 def get_measures(staff: ET.Element) -> List[ET.Element]:
     return [ch for ch in staff if ch.tag == "Measure"]
 
@@ -235,6 +243,15 @@ def next_id(existing: Set[str]) -> str:
 # --------------------------
 # Order copying helpers
 # --------------------------
+
+
+def hide_empty_voices(score: ET.Element):
+    he = ET.Element("hideWhenEmpty")
+    he.text = "on"
+    parts = score.findall("Part")
+    for part in list(parts):
+        if part.find("hideWhenEmpty") is None:
+            part.append(he)
 
 
 def find_order(score: ET.Element) -> Optional[ET.Element]:
@@ -613,15 +630,21 @@ def main():
     ap = argparse.ArgumentParser(description="Merge MS4 .mscz files")
     ap.add_argument("-o", "--output-name", required=True)
     ap.add_argument("-D", "--output-dir", default=".")
-    ap.add_argument("base")
-    ap.add_argument("donors", nargs="+")
+    ap.add_argument("file", nargs="+")
     args = ap.parse_args()
 
-    base_zip = os.path.abspath(args.base)
-    donor_list = [os.path.abspath(x) for x in args.donors]
+    base_zip = os.path.abspath(args.file[0])
+    donor_list = [os.path.abspath(x) for x in args.file[1:]]
     out_dir = os.path.abspath(args.output_dir)
     out_path = os.path.join(out_dir, f"{args.output_name}.mscz")
 
+    if len(donor_list) == 0 and os.path.splitext(base_zip)[1] != ".mscz":
+        with open(base_zip, "r", encoding="utf-8") as f:
+            donor_list = [
+                os.path.abspath(os.path.join(".", line.strip())) for line in f.readlines() if len(line.strip()) > 0
+            ]
+            base_zip = donor_list[0]
+            donor_list = donor_list[1:]
     if not os.path.isfile(base_zip):
         eprint(f"Base file not found: {base_zip}")
         return 66
@@ -647,7 +670,9 @@ def main():
         base_tree = ET.parse(io.BytesIO(raw))
         base_root = base_tree.getroot()
 
-        base_name_to_part, base_names_order, base_name_to_staff, base_staff_by_id = index_single_staff_parts(base_root)
+        base_name_to_part, base_names_order, base_name_to_staff, base_staff_by_id = index_single_staff_parts(
+            base_root, base_mscx
+        )
         used_staff_ids = set(base_staff_by_id.keys())
 
         solo_base = [nm for nm in base_names_order if _is_solo_part(base_name_to_part[nm])]
@@ -677,7 +702,7 @@ def main():
                 continue
 
             donor_name_to_part, donor_names_order, donor_name_to_staff, donor_staff_by_id = index_single_staff_parts(
-                donor_root
+                donor_root, donor_path
             )
 
             if primary_staff is not None:
@@ -729,6 +754,7 @@ def main():
         renumber_staff_ids_sequential(score)
         reorder_parts_inplace(score)
         relocate_vboxes_to_first_staff_by_measure_ordinal(score)
+        hide_empty_voices(score)
 
         buf = io.BytesIO()
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
