@@ -45,12 +45,10 @@ def get_score(root: ET.Element) -> ET.Element:
 
 def extract_longname(part: ET.Element) -> Optional[str]:
     """Strict longName-only. No fallback to trackName or instrumentId."""
-    # Prefer <Instrument><longName>
     for ln in part.findall(".//Instrument/longName"):
         val = (ln.text or "").strip()
         if val:
             return val
-    # fallback: <Part><longName>
     ln = part.find("longName")
     if ln is not None and (ln.text or "").strip():
         return (ln.text or "").strip()
@@ -76,16 +74,18 @@ def index_single_staff_parts(root: ET.Element):
         if not name:
             eprint("Warning: Part without longName skipped.")
             continue
+
         templates = p.findall("Staff")
         if len(templates) > 1:
             eprint(f"Note: Part '{name}' has {len(templates)} staff templates; single-staff mode uses first only.")
+
         if name in name_to_part:
             eprint(f"Warning: Duplicate longName '{name}' in base; skipping subsequent duplicates.")
             continue
+
         name_to_part[name] = p
         name_list.append(name)
 
-    # Score-level staffs
     score_staves = [s for s in score.findall("Staff") if "id" in s.attrib]
     n = min(len(name_list), len(score_staves))
     if n != len(name_list) or n != len(score_staves):
@@ -94,10 +94,10 @@ def index_single_staff_parts(root: ET.Element):
     name_to_staff: Dict[str, ET.Element] = {}
     for i in range(n):
         name_to_staff[name_list[i]] = score_staves[i]
-    staff_by_id = {s.attrib["id"]: s for s in score_staves}
 
-    # final ordering:
+    staff_by_id = {s.attrib["id"]: s for s in score_staves}
     final_names = [nm for nm in name_list if nm in name_to_staff]
+
     return name_to_part, final_names, name_to_staff, staff_by_id
 
 
@@ -108,7 +108,7 @@ def get_measures(staff: ET.Element) -> List[ET.Element]:
     return [ch for ch in staff if ch.tag == "Measure"]
 
 
-NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef", "subtype", "sigN", "sigD"]
+NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef", "subtype", "sigN", "sigD", "concertKey"]
 
 
 def measure_timesig_str(ms: ET.Element, fallback_ts: str) -> str:
@@ -133,7 +133,6 @@ def strip_measure(measure: ET.Element, timesig: str):
         timesig = measure_len
     if voices is None:
         return
-    # Strip note-ish tags but keep meta (TimeSig, KeySig, BarLine, Clef, etc.)
     voice = voices[0]
     removed = True
     while removed:
@@ -143,13 +142,14 @@ def strip_measure(measure: ET.Element, timesig: str):
                 if ch.tag not in NOTE_TAGS:
                     parent.remove(ch)
                     removed = True
-    # Insert a full-measure rest that matches the *current* timesig context
+
     rest = ET.Element("Rest")
     dt = ET.SubElement(rest, "durationType")
     dt.text = "measure"
     dur = ET.SubElement(rest, "duration")
     dur.text = timesig
     voice.append(rest)
+
     for voice in voices[1:]:
         measure.remove(voice)
 
@@ -266,6 +266,121 @@ def copy_instrument_into_order(order: ET.Element, donor_order: ET.Element, instr
     order.insert(idx, donor_stub)
 
 
+def reorder_parts_inplace(score: ET.Element):
+    """
+    Reorder <Part> elements IN PLACE so all soloists are first.
+    Does NOT touch <Staff>. Uses remove+insert for correct moves.
+    """
+
+    # Current parts in document order
+    parts = [el for el in score if el.tag == "Part"]
+
+    solo = [p for p in parts if _is_solo_part(p)]
+    non = [p for p in parts if not _is_solo_part(p)]
+    desired = solo + non
+
+    # First collect all <Part> positions in the tree
+    children = list(score)
+    part_positions = [i for i, ch in enumerate(children) if ch.tag == "Part"]
+
+    pos_iter = iter(part_positions)
+
+    for target_part in desired:
+        try:
+            target_index = next(pos_iter)
+        except StopIteration:
+            break
+
+        # If it is already in the correct spot, skip
+        if score[target_index] is target_part:
+            continue
+
+        # Correct, safe move:
+        #   1. Remove this specific part from wherever it is now
+        score.remove(target_part)
+        #   2. Insert at the correct target index
+        score.insert(target_index, target_part)
+
+        # Refresh children snapshot only for indices
+        children = list(score)
+
+
+def _is_solo_part(p: ET.Element) -> bool:
+    sol = p.find("soloist")
+    return sol is not None and (sol.text or "").strip() == "1"
+
+
+def _collect_parts(score: ET.Element) -> list[ET.Element]:
+    # Score-level <Part> elements, in document order
+    return [el for el in score if el.tag == "Part"]
+
+
+def _collect_score_staves(score: ET.Element) -> list[ET.Element]:
+    # Score-level <Staff> elements (not the templates under <Part>), in document order
+    return [el for el in score if el.tag == "Staff" and "id" in el.attrib]
+
+
+def compute_soloist_permutation_from_current_parts(score: ET.Element) -> list[int]:
+    """
+    Compute a permutation of indices for the *current* Parts so that soloists come first.
+    We only read current XML state; no reliance on name_to_* maps.
+    """
+    parts = _collect_parts(score)
+    solo_idx = [i for i, p in enumerate(parts) if _is_solo_part(p)]
+    non_idx = [i for i in range(len(parts)) if i not in solo_idx]
+    return solo_idx + non_idx
+
+
+def _reorder_block_inplace_by_permutation(score: ET.Element, tag: str, base_elems: list[ET.Element], perm: list[int]):
+    """
+    In-place reorder of a homogeneous block (<Staff> here) to follow a permutation that
+    was computed on the *Parts*. 'base_elems' must be a snapshot of the block BEFORE any moves.
+    We use remove+insert for a single node at a time to avoid duplicates.
+    """
+    # Current linear positions of the target tag inside score
+    children = list(score)
+    tag_positions = [i for i, ch in enumerate(children) if ch.tag == tag]
+
+    # Desired order by applying perm to the pre-move snapshot
+    desired = [base_elems[i] for i in perm if i < len(base_elems)]
+
+    pos_iter = iter(tag_positions)
+    for node in desired:
+        try:
+            target_pos = next(pos_iter)
+        except StopIteration:
+            break
+        if score[target_pos] is node:
+            continue
+        score.remove(node)
+        score.insert(target_pos, node)
+
+
+def reorder_staves_to_match_parts_soloists_first(score: ET.Element):
+    """
+    Compute soloist-first permutation from current Parts and mirror that onto
+    score-level Staves (single-staff mode). Does NOT touch Part order or IDs.
+    """
+    parts_snapshot = _collect_parts(score)
+    staves_snapshot = _collect_score_staves(score)
+    if not parts_snapshot or not staves_snapshot:
+        return
+
+    perm = compute_soloist_permutation_from_current_parts(score)
+    # Mirror permutation onto staves using the pre-move snapshot
+    _reorder_block_inplace_by_permutation(score, "Staff", staves_snapshot, perm)
+
+
+def renumber_staff_ids_sequential(score: ET.Element):
+    """
+    After reordering staves, set only <Staff id> to 1..N (in their current order).
+    Does NOT touch <Part id>.
+    """
+    staves = _collect_score_staves(score)
+    for i, st in enumerate(staves, start=1):
+        st.set("id", str(i))
+
+
 # --------------------------
 # VBox handling
 # --------------------------
@@ -282,6 +397,35 @@ def remove_vboxes(staff: Optional[ET.Element]) -> int:
     return removed
 
 
+def move_vboxes_from_old_first(score: ET.Element):
+    """
+    Move staff-level VBoxes from the previous first staff to the new first staff,
+    preserving their relative order among staff-level elements.
+    This matches the user's original intended behavior:
+      - VBoxes are system-level, not measure-level
+      - They appear before measures, in the order they originally existed
+    """
+
+    staffs = [el for el in score if el.tag == "Staff" and "id" in el.attrib]
+    if not staffs:
+        return
+    new_first = staffs[0]
+
+    # Collect (VBox, original_index) pairs
+    old_first_staff = [staff for staff in staffs if staff.find("VBox") is not None][0]
+    indexed_vboxes = [(i, ch) for i, ch in enumerate(list(old_first_staff)) if ch.tag == "VBox"]
+    if not indexed_vboxes:
+        return
+
+    # Remove them from old
+    for _, vb in indexed_vboxes:
+        old_first_staff.remove(vb)
+
+    # Insert vboxes in order
+    for offset, vb in indexed_vboxes:
+        new_first.insert(offset, vb)
+
+
 # --------------------------
 # New voice creation
 # --------------------------
@@ -294,19 +438,14 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
     """
     ref_ms = get_measures(ref_staff)
     placeholders: List[ET.Element] = []
-    current_ts = ""  # last known inherited timesig (N/D)
-
+    current_ts = ""
     for m in ref_ms:
-        # Priority 1: a pickup measure or irregular bar has explicit len="X/Y"
         if "len" in m.attrib:
             ts = m.attrib["len"]
         else:
-            # Priority 2: a regular measure inherits or defines real time signature
             ts = measure_timesig_str(m, current_ts)
-
         current_ts = ts
         placeholders.append(clone_placeholder(m, ts))
-
     return placeholders
 
 
@@ -320,18 +459,14 @@ def create_new_voice(
     primary_staff: Optional[ET.Element],
 ) -> tuple[ET.Element[str], ET.Element[str]]:
     score = get_score(base_root)
-
-    # copy donor <Part>
     new_part = deepcopy(donor_part)
-    new_id = next_id({p.get("id", "0") for p in score.findall("Part")})
+    new_id = next_id(used_staff_ids)
     new_part.set("id", new_id)
 
-    # keep only first staff template
     st_templates = new_part.findall("Staff")
     for st in st_templates[1:]:
         new_part.remove(st)
 
-    # insert new <Part> before first score-level <Staff>
     idx = len(score)
     for i, el in enumerate(score):
         if el.tag == "Staff":
@@ -339,27 +474,21 @@ def create_new_voice(
             break
     score.insert(idx, new_part)
 
-    # create a new score-level <Staff>
     new_staff = deepcopy(donor_staff)
-    new_sid = next_id(used_staff_ids)
-    used_staff_ids.add(new_sid)
-    new_staff.set("id", new_sid)
+    used_staff_ids.add(new_id)
+    new_staff.set("id", new_id)
     score.append(new_staff)
 
-    # backfill placeholders ONLY (no donor measures yet) — **per measure TS**
     if primary_staff is not None:
         placeholders = _build_placeholders_from_reference(primary_staff)
-        # wipe existing donor measures on the cloned staff
         for dm in list(new_staff):
             if dm.tag == "Measure":
                 new_staff.remove(dm)
         for ph in placeholders:
             new_staff.append(ph)
 
-    # Ensure no VBox remains on the newly created staff; merge will place VBox once
     remove_vboxes(new_staff)
 
-    # copy Order stub if needed
     base_order = find_order(score)
     donor_order = find_order(get_score(donor_root))
     if base_order is not None and donor_order is not None:
@@ -467,23 +596,25 @@ def main():
     ensure_dir(base_dir)
 
     try:
-        # extract base
         with zipfile.ZipFile(base_zip, "r") as z:
             z.extractall(base_dir)
             mscx_name = first_mscx_name(z)
-        if not mscx_name:
-            eprint("Base has no .mscx")
-            return 65
+            if not mscx_name:
+                eprint("Base has no .mscx")
+                return 65
 
         base_mscx = os.path.join(base_dir, mscx_name)
         raw = open(base_mscx, "rb").read()
         base_tree = ET.parse(io.BytesIO(raw))
         base_root = base_tree.getroot()
 
-        # base indexing
         base_name_to_part, base_names_order, base_name_to_staff, base_staff_by_id = index_single_staff_parts(base_root)
         used_staff_ids = set(base_staff_by_id.keys())
-        keys_order = list(base_names_order)
+
+        solo_base = [nm for nm in base_names_order if _is_solo_part(base_name_to_part[nm])]
+        normal_base = [nm for nm in base_names_order if nm not in solo_base]
+        keys_order = solo_base + normal_base
+
         primary_staff = base_staff_by_id.get("1")
 
         for donor_path in donor_list:
@@ -510,24 +641,20 @@ def main():
                 donor_root
             )
 
-            # Insert section break on last base measure before adding this donor
             if primary_staff is not None:
                 lm = last_measure(primary_staff)
                 if lm is not None:
                     insert_break(lm)
 
-            # ---- Place donor VBox BEFORE any donor measures are appended
             donor_first_name = donor_names_order[0] if donor_names_order else None
             donor_first_staff = donor_name_to_staff.get(donor_first_name) if donor_first_name else None
+
             if primary_staff is not None and donor_first_staff is not None:
-                # Find first VBox on donor first staff
                 for ch in donor_first_staff:
                     if ch.tag == "VBox":
                         primary_staff.append(deepcopy(ch))
                         break
-            # ---- end VBox placement
 
-            # New voices (create empty staves with placeholders)
             base_names = set(keys_order)
             new_voices = [nm for nm in donor_names_order if nm not in base_names]
             for nm in new_voices:
@@ -538,38 +665,48 @@ def main():
                 base_name_to_part[nm] = new_part
                 keys_order.append(nm)
 
-            # Build placeholder template from donor *per-measure* TS
+                solo_all = [n for n in keys_order if _is_solo_part(base_name_to_part[n])]
+                normal_all = [n for n in keys_order if n not in solo_all]
+                keys_order = solo_all + normal_all
+
             donor_ref_staff = donor_first_staff
-            donor_placeholders: List[ET.Element] = []
+            donor_placeholders = []
             if donor_ref_staff is not None:
                 donor_placeholders = _build_placeholders_from_reference(donor_ref_staff)
 
-            # Merge donor contents per voice
             for nm in keys_order:
                 bs = base_name_to_staff.get(nm)
                 if bs is None:
                     continue
+
                 if nm in donor_name_to_staff:
                     ds = donor_name_to_staff[nm]
                     for ch in list(ds):
                         if ch.tag == "VBox":
-                            # skip here; VBox already placed once on primary_staff
                             continue
                         bs.append(deepcopy(ch))
                 else:
                     for ph in donor_placeholders:
                         bs.append(deepcopy(ph))
 
-        # write final
+        score = get_score(base_root)
+        reorder_staves_to_match_parts_soloists_first(score)
+        renumber_staff_ids_sequential(score)
+        move_vboxes_from_old_first(score)
+        reorder_parts_inplace(score)
+
         buf = io.BytesIO()
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
         open(base_mscx, "wb").write(buf.getvalue())
+
         shutil.move(base_mscx, os.path.join(base_dir, f"{args.output_name}.mscx"))
         ensure_dir(out_dir)
         write_zip_from_dir(base_dir, out_path)
         print(f"OK: merged archive created at: {out_path}")
+
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
     return 0
 
 
