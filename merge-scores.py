@@ -6,7 +6,6 @@ Merge donor .mscz into a base .mscz by appending <Staff id="n"> contents
 """
 
 from __future__ import annotations
-
 import argparse
 import io
 import os
@@ -16,12 +15,17 @@ import sys
 import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
+from typing import List, Dict, Optional, Set
 from copy import deepcopy
-from typing import Optional, List, Dict
 
 
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
+# --------------------------
+# Utility
+# --------------------------
+
+
+def eprint(*args, **kw):
+    print(*args, file=sys.stderr, **kw)
 
 
 def first_mscx_name(zf: zipfile.ZipFile) -> Optional[str]:
@@ -47,27 +51,120 @@ def inject_doctype(xml_bytes: bytes, doctype: Optional[str]) -> bytes:
     return (doctype + "\n" + text).encode("utf-8")
 
 
-def find_staffs(root: ET.Element) -> List[ET.Element]:
-    return [s for s in root.findall(".//Staff") if "id" in s.attrib]
+# --------------------------
+# MS4 helpers
+# --------------------------
 
 
-def pick_primary_staff_id(staff_by_id: Dict[str, ET.Element]) -> Optional[str]:
-    if "1" in staff_by_id:
-        return "1"
-    numeric, other = [], []
-    for sid in staff_by_id:
-        try:
-            numeric.append((int(sid), sid))
-        except ValueError:
-            other.append(sid)
-    if numeric:
-        numeric.sort()
-        return numeric[0][1]
-    return min(other) if other else None
+def get_score(root: ET.Element) -> ET.Element:
+    """Return the <Score> element, accounting for <museScore> wrapper."""
+    if root.tag == "Score":
+        return root
+    s = root.find("Score")
+    return s if s is not None else root
+
+
+def extract_longname(part: ET.Element) -> Optional[str]:
+    """Strict longName-only. No fallback to trackName or instrumentId."""
+    # Prefer <Instrument><longName>
+    for ln in part.findall(".//Instrument/longName"):
+        val = (ln.text or "").strip()
+        if val:
+            return val
+    # fallback: <Part><longName>
+    ln = part.find("longName")
+    if ln is not None and (ln.text or "").strip():
+        return (ln.text or "").strip()
+    return None
+
+
+def index_single_staff_parts(root: ET.Element):
+    """
+    MS4 single-staff index:
+      returns:
+        name_to_part: longName -> Part element
+        name_list: order of part names as they appear
+        name_to_staff: longName -> score-level Staff
+        staff_by_id
+    """
+    score = get_score(root)
+
+    parts = list(score.findall("Part"))
+
+    name_to_part: Dict[str, ET.Element] = {}
+    name_list: List[str] = []
+
+    for p in parts:
+        name = extract_longname(p)
+        if not name:
+            eprint("Warning: Part without longName skipped.")
+            continue
+
+        templates = p.findall("Staff")
+        if len(templates) > 1:
+            eprint(f"Note: Part '{name}' has {len(templates)} staff templates; single-staff mode uses first only.")
+
+        if name in name_to_part:
+            eprint(f"Warning: Duplicate longName '{name}' in base; skipping subsequent duplicates.")
+            continue
+
+        name_to_part[name] = p
+        name_list.append(name)
+
+    # Score-level staffs
+    score_staves = [s for s in score.findall("Staff") if "id" in s.attrib]
+
+    n = min(len(name_list), len(score_staves))
+    if n != len(name_list) or n != len(score_staves):
+        eprint(f"Note: mismatch (parts={len(name_list)} staves={len(score_staves)}); using first {n} pairs.")
+
+    name_to_staff: Dict[str, ET.Element] = {}
+    for i in range(n):
+        nm = name_list[i]
+        st = score_staves[i]
+        name_to_staff[nm] = st
+
+    staff_by_id = {s.attrib["id"]: s for s in score_staves}
+
+    # final ordering:
+    final_names = [nm for nm in name_list if nm in name_to_staff]
+
+    return name_to_part, final_names, name_to_staff, staff_by_id
 
 
 # --------------------------
-# Section break utilities
+# Measures & placeholders
+# --------------------------
+
+
+def get_measures(staff: ET.Element) -> List[ET.Element]:
+    return [ch for ch in staff if ch.tag == "Measure"]
+
+
+def strip_measure(measure: ET.Element):
+    # Remove <voice> entirely
+    for v in list(measure.findall("voice")):
+        measure.remove(v)
+    # Strip note-ish tags
+    NOTE_TAGS = ["Chord", "Rest", "ChordRest", "Note", "lyrics", "Lyrics"]
+    removed = True
+    while removed:
+        removed = False
+        for parent in list(measure.iter()):
+            for ch in list(parent):
+                if ch.tag in NOTE_TAGS:
+                    parent.remove(ch)
+                    removed = True
+
+
+def clone_placeholder(m: ET.Element) -> ET.Element:
+    cp = deepcopy(m)
+    strip_measure(cp)
+    return cp
+
+
+# --------------------------
+# Section breaks
 # --------------------------
 
 
@@ -78,149 +175,226 @@ def create_section_break() -> ET.Element:
     return lb
 
 
-def measure_has_section_break(measure: ET.Element) -> bool:
-    """
-    Detect a section break inside <Measure>.
-    Accept both:
-      - <LayoutBreak><subtype>section|Section</subtype>...</LayoutBreak>
-      - <LayoutBreak type="Section"|"section" .../>
-    """
-    for ch in list(measure):
+def has_section_break(m: ET.Element) -> bool:
+    for ch in m:
         if ch.tag != "LayoutBreak":
             continue
         t = ch.get("type")
         if t and t.lower() == "section":
             return True
-        # Check nested <subtype>
-        for sub in list(ch):
+        for sub in ch:
             if sub.tag == "subtype" and (sub.text or "").strip().lower() == "section":
                 return True
     return False
 
 
-def insert_break_into_measure(measure: ET.Element) -> None:
-    """
-    Insert LayoutBreak inside <Measure>, before the first <voice>, and right after <eid> if present.
-    If a section break is already present, do nothing.
-    """
-    if measure_has_section_break(measure):
+def insert_break(m: ET.Element):
+    if has_section_break(m):
         return
-
     lb = create_section_break()
-    children = list(measure)
-
-    eid_index = None
-    first_voice_index = None
-    for i, ch in enumerate(children):
-        if ch.tag == "eid" and eid_index is None:
-            eid_index = i
-        if ch.tag == "voice" and first_voice_index is None:
-            first_voice_index = i
-
-    if first_voice_index is not None:
-        ins_index = first_voice_index
-        if eid_index is not None and eid_index < first_voice_index:
-            ins_index = eid_index + 1
-        measure.insert(ins_index, lb)
+    kids = list(m)
+    eid_i = None
+    v_i = None
+    for i, ch in enumerate(kids):
+        if ch.tag == "eid":
+            eid_i = i
+        if ch.tag == "voice" and v_i is None:
+            v_i = i
+    if v_i is not None:
+        idx = v_i
+        if eid_i is not None and eid_i < v_i:
+            idx = eid_i + 1
     else:
-        ins_index = (eid_index + 1) if eid_index is not None else 0
-        measure.insert(ins_index, lb)
+        idx = (eid_i + 1) if eid_i is not None else 0
+    m.insert(idx, lb)
 
 
-def last_measure_of_staff(staff_elem: Optional[ET.Element]) -> Optional[ET.Element]:
-    if staff_elem is None:
+def last_measure(staff: Optional[ET.Element]) -> Optional[ET.Element]:
+    if not staff:
         return None
-    measures = [ch for ch in list(staff_elem) if ch.tag == "Measure"]
-    return measures[-1] if measures else None
+    ms = get_measures(staff)
+    return ms[-1] if ms else None
 
 
 # --------------------------
-# Appending logic
+# ID helpers
 # --------------------------
 
 
-def append_staff_children_and_get_last_appended_measure_primary(
+def next_id(existing: Set[str]) -> str:
+    nums = []
+    for x in existing:
+        try:
+            nums.append(int(x))
+        except:
+            pass
+    base = max(nums) + 1 if nums else 1
+    n = base
+    while str(n) in existing:
+        n += 1
+    return str(n)
+
+
+# --------------------------
+# Order copying helpers
+# --------------------------
+
+
+def find_order(score: ET.Element) -> Optional[ET.Element]:
+    # Namespaced or not, tag endswith("Order")
+    for ch in score:
+        if ch.tag.endswith("Order"):
+            return ch
+    return None
+
+
+def copy_instrument_into_order(order: ET.Element, donor_order: ET.Element, instr_id: str, longName: str):
+    """Copy donor's instrument stub into base <Order>, respecting SOLO rule."""
+    # locate donor stub
+    donor_stub = None
+    for it in donor_order.findall("instrument"):
+        if it.get("id") == instr_id:
+            donor_stub = deepcopy(it)
+            break
+    if donor_stub is None:
+        # fallback: create minimal stub
+        donor_stub = ET.Element("instrument", {"id": instr_id})
+        fam = ET.SubElement(donor_stub, "family")
+        fam.set("id", "voices")
+        fam.text = "Stimmen"
+
+    # SOLO AT TOP RULE
+    is_solo = longName.strip().lower() == "solo"
+
+    # find insertion point
+    children = list(order)
+
+    if is_solo:
+        # insert after <name> but before any instruments
+        idx = 0
+        for i, ch in enumerate(children):
+            if ch.tag == "name":
+                idx = i + 1
+                break
+        order.insert(idx, donor_stub)
+    else:
+        # append at bottom, but before <soloists>, <section>, <family>, <unsorted>
+        bottom_tags = {"soloists", "section", "family", "unsorted"}
+        idx = len(children)
+        for i, ch in enumerate(children):
+            tag = ch.tag
+            if tag in bottom_tags:
+                idx = i
+                break
+        order.insert(idx, donor_stub)
+
+
+# --------------------------
+# New voice creation
+# --------------------------
+
+
+def create_new_voice(
     base_root: ET.Element,
     donor_root: ET.Element,
-    primary_sid: Optional[str],
-) -> Optional[ET.Element]:
-    """
-    Append donor <Staff id="..."> children into base.
-    Return the last appended <Measure> for the PRIMARY staff (primary_sid), or None.
-    """
-    base_staff_by_id: Dict[str, ET.Element] = {s.attrib["id"]: s for s in find_staffs(base_root)}
-    donor_staffs = find_staffs(donor_root)
+    longName: str,
+    donor_part: ET.Element,
+    donor_staff: ET.Element,
+    used_staff_ids: Set[str],
+    primary_staff: Optional[ET.Element],
+):
+    score = get_score(base_root)
 
-    if not donor_staffs:
-        eprint("Warning: Donor has no <Staff id='...'> elements; skipping.")
-        return None
+    # copy donor <Part>
+    new_part = deepcopy(donor_part)
+    # assign fresh part id
+    new_id = next_id({p.get("id") for p in score.findall("Part")})
+    old_id = donor_part.get("id")
+    if old_id:
+        new_part.set("id", new_id)
 
-    last_appended_measure_primary: Optional[ET.Element] = None
+    # keep only first staff template
+    st_templates = new_part.findall("Staff")
+    for st in st_templates[1:]:
+        new_part.remove(st)
 
-    for ds in donor_staffs:
-        sid = ds.attrib.get("id")
-        bs = base_staff_by_id.get(sid)
-        if bs is None:
-            eprint(f"Warning: Base has no <Staff id='{sid}'>; skipping donor staff.")
-            continue
+    score.append(new_part)
 
-        for child in list(ds):
-            copy_child = deepcopy(child)
-            bs.append(copy_child)
-            if sid == primary_sid and copy_child.tag == "Measure":
-                last_appended_measure_primary = copy_child
+    # staff for notation
+    new_staff = deepcopy(donor_staff)
+    new_sid = next_id(used_staff_ids)
+    used_staff_ids.add(new_sid)
+    new_staff.set("id", new_sid)
+    score.append(new_staff)
 
-    return last_appended_measure_primary
+    # backfill placeholders
+    if primary_staff is not None:
+        ref_ms = get_measures(primary_staff)
+        donor_ms = get_measures(new_staff)
+        phs = [clone_placeholder(m) for m in ref_ms]
+        for dm in donor_ms:
+            new_staff.remove(dm)
+        for ph in phs:
+            new_staff.append(ph)
+        for dm in donor_ms:
+            new_staff.append(dm)
+
+    # copy donor Order stub
+    base_order = find_order(score)
+    donor_order = find_order(get_score(donor_root))
+    if base_order is not None and donor_order is not None:
+        # determine instrument id from donor part's <Instrument>
+        instr = donor_part.find(".//Instrument")
+        instr_id = instr.get("id") if instr is not None and instr.get("id") else longName.lower().replace(" ", "_")
+        # check if base already has it
+        exists = any(it.get("id") == instr_id for it in base_order.findall("instrument"))
+        if not exists:
+            copy_instrument_into_order(base_order, donor_order, instr_id, longName)
+    else:
+        eprint("Warning: Could not locate <Order> in donor/base; instrument stub not copied.")
+
+    return new_part, new_staff
 
 
 # --------------------------
-# Lenient donor XML parsing
+# XML lenient parser
 # --------------------------
 
-_ILLEGAL_XML_CHARS_RE = re.compile(
-    r"([\x00-\x08\x0B\x0C\x0E-\x1F])"  # control chars not allowed by XML 1.0 (except \t,\n,\r)
-)
+_ILLEGAL = re.compile(r"([\x00-\x08\x0B\x0C\x0E-\x1F])")
 
 
-def _sanitize_xml_bytes(b: bytes) -> bytes:
+def sanitize(b: bytes) -> bytes:
     b = b.replace(b"\x00", b"")
     try:
         s = b.decode("utf-8", errors="replace")
     except Exception:
         s = b.decode("latin-1", errors="replace")
-    s = _ILLEGAL_XML_CHARS_RE.sub("", s)
+    s = _ILLEGAL.sub("", s)
     return s.encode("utf-8")
 
 
-def _truncate_to_last_root_end(b: bytes) -> bytes:
+def truncate_root(b: bytes) -> bytes:
     s = b.decode("utf-8", errors="ignore")
     for closing in ("</museScore>", "</Score>"):
-        idx = s.rfind(closing)
-        if idx != -1:
-            end = idx + len(closing)
-            return s[:end].encode("utf-8")
+        i = s.rfind(closing)
+        if i != -1:
+            return s[: i + len(closing)].encode("utf-8")
     return b
 
 
-def parse_xml_lenient(xml_bytes: bytes, label: str) -> Optional[ET.ElementTree]:
+def parse_xml_lenient(b: bytes, label: str) -> Optional[ET.ElementTree]:
     parser = ET.XMLParser()
     try:
-        return ET.parse(io.BytesIO(xml_bytes), parser=parser)
-    except ET.ParseError as e:
-        eprint(f"Warning: Strict parse failed for {label}: {e}. Trying lenient recovery...")
-
-    cleaned = _sanitize_xml_bytes(xml_bytes)
-    try:
-        return ET.parse(io.BytesIO(cleaned), parser=parser)
-    except ET.ParseError as e:
-        eprint(f"Warning: Parse after sanitizing failed for {label}: {e}. Trying truncation...")
-
-    truncated = _truncate_to_last_root_end(cleaned)
-    try:
-        return ET.parse(io.BytesIO(truncated), parser=parser)
-    except ET.ParseError as e:
-        eprint(f"Warning: Truncated parse failed for {label}: {e}. Giving up.")
-        return None
+        return ET.parse(io.BytesIO(b), parser)
+    except ET.ParseError:
+        try:
+            return ET.parse(io.BytesIO(sanitize(b)), parser)
+        except ET.ParseError:
+            try:
+                return ET.parse(io.BytesIO(truncate_root(sanitize(b))), parser)
+            except ET.ParseError:
+                eprint(f"Could not parse donor '{label}'.")
+                return None
 
 
 # --------------------------
@@ -248,118 +422,143 @@ def write_zip_from_dir(src_dir: str, out_zip: str) -> None:
 # --------------------------
 
 
-def main() -> int:
+def main():
     ap = argparse.ArgumentParser(
-        description="Merge donor .mscz into base .mscz (append Staff contents) and add section breaks at boundaries."
+        description="Merge MS4 .mscz files (single-staff, strict longName, donor-ordered, Solo-at-top)."
     )
-    ap.add_argument("-o", "--output-name", required=True, help="Output filename (without extension).")
-    ap.add_argument("-D", "--output-dir", default=".", help="Output directory. Default: .")
-    ap.add_argument("base", help="Base .mscz file")
-    ap.add_argument("donors", nargs="+", help="Donor .mscz files (order matters)")
+    ap.add_argument("-o", "--output-name", required=True)
+    ap.add_argument("-D", "--output-dir", default=".")
+    ap.add_argument("base")
+    ap.add_argument("donors", nargs="+")
     args = ap.parse_args()
 
-    base_zip_path = os.path.abspath(args.base)
-    donor_zip_paths = [os.path.abspath(p) for p in args.donors]
+    base_zip = os.path.abspath(args.base)
+    donor_list = [os.path.abspath(x) for x in args.donors]
     out_dir = os.path.abspath(args.output_dir)
     out_path = os.path.join(out_dir, f"{args.output_name}.mscz")
 
-    if not os.path.isfile(base_zip_path):
-        eprint(f"Error: Base file not found: {base_zip_path}")
+    if not os.path.isfile(base_zip):
+        eprint(f"Base file not found: {base_zip}")
         return 66
-    for p in donor_zip_paths:
-        if not os.path.isfile(p):
-            eprint(f"Error: Donor file not found: {p}")
+    for d in donor_list:
+        if not os.path.isfile(d):
+            eprint(f"Donor file not found: {d}")
             return 66
 
-    workdir = tempfile.mkdtemp(prefix="mscz_merge_")
-    base_dir = os.path.join(workdir, "base")
+    work = tempfile.mkdtemp("mscore_merge_")
+    base_dir = os.path.join(work, "base")
     ensure_dir(base_dir)
 
     try:
-        with zipfile.ZipFile(base_zip_path, "r") as z:
+        # extract base
+        with zipfile.ZipFile(base_zip, "r") as z:
             z.extractall(base_dir)
-            base_mscx_name = first_mscx_name(z)
-        if not base_mscx_name:
-            eprint(f"Error: No .mscx file found inside base archive: {base_zip_path}")
-            return 65
-
-        base_mscx_path = os.path.join(base_dir, base_mscx_name.replace("/", os.sep))
-        if not os.path.isfile(base_mscx_path):
-            found = []
-            for root, _dirs, files in os.walk(base_dir):
-                for f in files:
-                    if f.lower().endswith(".mscx"):
-                        found.append(os.path.join(root, f))
-            if not found:
-                eprint(f"Error: Extracted base does not contain any .mscx: {base_zip_path}")
+            mscx_name = first_mscx_name(z)
+            if not mscx_name:
+                eprint("Base has no .mscx")
                 return 65
-            base_mscx_path = sorted(found)[0]
 
-        with open(base_mscx_path, "rb") as f:
-            base_raw = f.read()
-        base_doctype = read_doctype(base_raw.decode("utf-8", errors="ignore"))
-
-        base_tree = ET.parse(io.BytesIO(base_raw), parser=ET.XMLParser())
+        base_mscx = os.path.join(base_dir, mscx_name)
+        raw = open(base_mscx, "rb").read()
+        doctype = read_doctype(raw.decode("utf-8", errors="ignore"))
+        base_tree = ET.parse(io.BytesIO(raw))
         base_root = base_tree.getroot()
 
-        base_staff_by_id: Dict[str, ET.Element] = {s.attrib["id"]: s for s in find_staffs(base_root)}
-        primary_sid = pick_primary_staff_id(base_staff_by_id)
-        primary_staff_elem = base_staff_by_id.get(primary_sid) if primary_sid else None
+        # base indexing
+        base_name_to_part, base_names_order, base_name_to_staff, base_staff_by_id = index_single_staff_parts(base_root)
+        used_staff_ids = set(base_staff_by_id.keys())
 
-        for donor_path in donor_zip_paths:
-            donor_label = os.path.basename(donor_path)
+        # stable final ordered list
+        keys_order = list(base_names_order)
+
+        # primary staff = id="1" if exists
+        primary_staff = base_staff_by_id.get("1")
+
+        for donor_path in donor_list:
+            label = os.path.basename(donor_path)
             try:
                 with zipfile.ZipFile(donor_path, "r") as dz:
-                    donor_mscx_name = first_mscx_name(dz)
-                    if not donor_mscx_name:
-                        eprint(f"Warning: No .mscx inside donor '{donor_label}'; skipping.")
+                    dn_mscx = first_mscx_name(dz)
+                    if not dn_mscx:
+                        eprint(f"No .mscx in donor {label}, skipping.")
                         continue
-                    donor_bytes = dz.read(donor_mscx_name)
-            except zipfile.BadZipFile as e:
-                eprint(f"Warning: Donor '{donor_label}' is not a valid zip: {e}; skipping.")
-                continue
-            except KeyError as e:
-                eprint(f"Warning: Donor '{donor_label}' missing expected file: {e}; skipping.")
+                    donor_bytes = dz.read(dn_mscx)
+            except:
+                eprint(f"Could not read donor {label}, skipping.")
                 continue
 
-            donor_tree = parse_xml_lenient(donor_bytes, donor_label)
+            donor_tree = parse_xml_lenient(donor_bytes, label)
             if donor_tree is None:
-                eprint(f"Warning: Could not parse donor '{donor_label}' even after recovery; skipping.")
                 continue
 
-            pre_last_measure = last_measure_of_staff(primary_staff_elem)
-            if pre_last_measure is not None:
-                insert_break_into_measure(pre_last_measure)
-            else:
-                eprint(
-                    f"Warning: No measure found in primary staff to place pre-append break before donor '{donor_label}'."
-                )
-
-            last_appended = append_staff_children_and_get_last_appended_measure_primary(
-                base_root, donor_tree.getroot(), primary_sid
+            donor_root = donor_tree.getroot()
+            donor_name_to_part, donor_names_order, donor_name_to_staff, donor_staff_by_id = index_single_staff_parts(
+                donor_root
             )
 
-            if last_appended is None and primary_staff_elem is not None:
-                last_appended = last_measure_of_staff(primary_staff_elem)
+            # Pre-break
+            if primary_staff:
+                lm = last_measure(primary_staff)
+                if lm:
+                    insert_break(lm)
 
-            if last_appended is not None:
-                insert_break_into_measure(last_appended)
-            else:
-                eprint(f"Warning: No measure found to attach post-append break for donor '{donor_label}'.")
+            base_names = set(keys_order)
+            donor_names = set(donor_name_to_staff.keys())
 
+            # NEW VOICES
+            new_voices = [nm for nm in donor_names_order if nm not in base_names]
+
+            # copy new voices in donor order
+            for nm in new_voices:
+                dp = donor_name_to_part[nm]
+                ds = donor_name_to_staff[nm]
+
+                new_part, new_staff = create_new_voice(base_root, donor_root, nm, dp, ds, used_staff_ids, primary_staff)
+
+                # update indexing
+                base_name_to_staff[nm] = new_staff
+                base_name_to_part[nm] = new_part
+                keys_order.append(nm)
+
+            # placeholders reference: donor first staff
+            donor_ref_staff = donor_name_to_staff[donor_names_order[0]] if donor_names_order else None
+            donor_placeholders = []
+            if donor_ref_staff:
+                donor_placeholders = [clone_placeholder(m) for m in get_measures(donor_ref_staff)]
+
+            # merge voices in final order
+            for nm in keys_order:
+                bs = base_name_to_staff.get(nm)
+                if bs is None:
+                    continue
+
+                if nm in donor_name_to_staff:
+                    ds = donor_name_to_staff[nm]
+                    for ch in list(ds):
+                        bs.append(deepcopy(ch))
+                else:
+                    # missing in donor -> placeholders
+                    for ph in donor_placeholders:
+                        bs.append(deepcopy(ph))
+
+            # Post-break
+            if primary_staff:
+                lm = last_measure(primary_staff)
+                if lm:
+                    insert_break(lm)
+
+        # write final
         buf = io.BytesIO()
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
-        final_bytes = inject_doctype(buf.getvalue(), base_doctype)
-
-        with open(base_mscx_path, "wb") as f:
-            f.write(final_bytes)
+        final_data = inject_doctype(buf.getvalue(), doctype)
+        open(base_mscx, "wb").write(final_data)
 
         ensure_dir(out_dir)
         write_zip_from_dir(base_dir, out_path)
         print(f"OK: merged archive created at: {out_path}")
 
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        shutil.rmtree(work, ignore_errors=True)
 
     return 0
 
