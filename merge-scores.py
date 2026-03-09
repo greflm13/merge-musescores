@@ -108,7 +108,7 @@ def get_measures(staff: ET.Element) -> List[ET.Element]:
     return [ch for ch in staff if ch.tag == "Measure"]
 
 
-NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef"]
+NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef", "subtype", "sigN", "sigD"]
 
 
 def measure_timesig_str(ms: ET.Element, fallback_ts: str) -> str:
@@ -318,7 +318,7 @@ def create_new_voice(
     donor_staff: ET.Element,
     used_staff_ids: Set[str],
     primary_staff: Optional[ET.Element],
-):
+) -> tuple[ET.Element[str], ET.Element[str]]:
     score = get_score(base_root)
 
     # copy donor <Part>
@@ -365,6 +365,7 @@ def create_new_voice(
     if base_order is not None and donor_order is not None:
         instr = donor_part.find(".//Instrument")
         instr_id = instr.get("id") if instr is not None and instr.get("id") else longName.lower().replace(" ", "_")
+        assert isinstance(instr_id, str)
         exists = any(it.get("id") == instr_id for it in base_order.findall("instrument"))
         if not exists:
             copy_instrument_into_order(base_order, donor_order, instr_id, longName)
@@ -400,7 +401,7 @@ def truncate_root(b: bytes) -> bytes:
     return b
 
 
-def parse_xml_lenient(b: bytes, label: str) -> Optional[ET.ElementTree]:
+def parse_xml_lenient(b: bytes, label: str) -> ET.ElementTree[ET.Element] | None:
     parser = ET.XMLParser()
     try:
         return ET.parse(io.BytesIO(b), parser)
@@ -528,7 +529,6 @@ def main():
 
             # New voices (create empty staves with placeholders)
             base_names = set(keys_order)
-            donor_names = set(donor_name_to_staff.keys())
             new_voices = [nm for nm in donor_names_order if nm not in base_names]
             for nm in new_voices:
                 dp = donor_name_to_part[nm]
