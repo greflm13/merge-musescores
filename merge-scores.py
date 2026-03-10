@@ -60,13 +60,7 @@ def extract_longname(part: ET.Element) -> Optional[str]:
 
 
 def index_single_staff_parts(root: ET.Element, file: str):
-    """
-    Returns:
-      name_to_part: longName -> <Part>
-      final_names: order of names as appear
-      name_to_staff: longName -> score-level <Staff>
-      staff_by_id: id -> <Staff>
-    """
+
     score = get_score(root)
     parts = list(score.findall("Part"))
 
@@ -75,36 +69,43 @@ def index_single_staff_parts(root: ET.Element, file: str):
 
     for p in parts:
         name = extract_longname(p)
+
         if not name:
             eprint(f"Warning: Part without longName skipped. {file}")
             continue
 
-        templates = p.findall("Staff")
-        if len(templates) > 1:
-            eprint(
-                f"Note: Part '{name}' has {len(templates)} staff templates; single-staff mode uses first only. {file}"
-            )
-
         if name in name_to_part:
-            eprint(f"Warning: Duplicate longName '{name}' in base; skipping subsequent duplicates. {file}")
+            eprint(f"Warning: Duplicate longName '{name}' skipped. {file}")
             continue
 
         name_to_part[name] = p
         name_list.append(name)
 
     score_staves = [s for s in score.findall("Staff") if "id" in s.attrib]
-    n = min(len(name_list), len(score_staves))
-    if n != len(name_list) or n != len(score_staves):
-        eprint(f"Note: mismatch (parts={len(name_list)} staves={len(score_staves)}); using first {n} pairs. {file}")
 
-    name_to_staff: Dict[str, ET.Element] = {}
-    for i in range(n):
-        name_to_staff[name_list[i]] = score_staves[i]
+    name_to_staves: Dict[str, List[ET.Element]] = {}
+
+    cursor = 0
+
+    for name in name_list:
+        part = name_to_part[name]
+
+        templates = part.findall("Staff")
+        count = len(templates)
+
+        if cursor + count > len(score_staves):
+            eprint(f"Warning: staff mismatch. {file}")
+            break
+
+        name_to_staves[name] = score_staves[cursor : cursor + count]
+
+        cursor += count
 
     staff_by_id = {s.attrib["id"]: s for s in score_staves}
-    final_names = [nm for nm in name_list if nm in name_to_staff]
 
-    return name_to_part, final_names, name_to_staff, staff_by_id
+    final_names = [nm for nm in name_list if nm in name_to_staves]
+
+    return name_to_part, final_names, name_to_staves, staff_by_id
 
 
 # --------------------------
@@ -670,7 +671,7 @@ def main():
         base_tree = ET.parse(io.BytesIO(raw))
         base_root = base_tree.getroot()
 
-        base_name_to_part, base_names_order, base_name_to_staff, base_staff_by_id = index_single_staff_parts(
+        base_name_to_part, base_names_order, base_name_to_staves, base_staff_by_id = index_single_staff_parts(
             base_root, base_mscx
         )
         used_staff_ids = set(base_staff_by_id.keys())
@@ -698,12 +699,18 @@ def main():
             if donor_tree is None:
                 continue
             donor_root = donor_tree.getroot()
-            if donor_root is None:
-                continue
 
-            donor_name_to_part, donor_names_order, donor_name_to_staff, donor_staff_by_id = index_single_staff_parts(
+            donor_name_to_part, donor_names_order, donor_name_to_staves, donor_staff_by_id = index_single_staff_parts(
                 donor_root, donor_path
             )
+
+            donor_locks = get_score(donor_root).find("SystemLocks")
+            if donor_locks is not None:
+                system_locks = donor_locks.findall("systemLock")
+                systemlock = get_score(base_root).find("SystemLocks")
+
+                if systemlock is not None and system_locks is not None:
+                    systemlock.extend(system_locks)
 
             if primary_staff is not None:
                 lm = last_measure(primary_staff)
@@ -711,15 +718,25 @@ def main():
                     insert_break(lm)
 
             donor_first_name = donor_names_order[0] if donor_names_order else None
-            donor_first_staff = donor_name_to_staff.get(donor_first_name) if donor_first_name else None
+            donor_first_staff = donor_name_to_staves.get(donor_first_name)[0] if donor_first_name else None
 
             base_names = set(keys_order)
             new_voices = [nm for nm in donor_names_order if nm not in base_names]
             for nm in new_voices:
                 dp = donor_name_to_part[nm]
-                ds = donor_name_to_staff[nm]
-                new_part, new_staff = create_new_voice(base_root, donor_root, nm, dp, ds, used_staff_ids, primary_staff)
-                base_name_to_staff[nm] = new_staff
+                ds = donor_name_to_staves[nm][0]
+
+                new_part, new_staff = create_new_voice(
+                    base_root,
+                    donor_root,
+                    nm,
+                    dp,
+                    ds,
+                    used_staff_ids,
+                    primary_staff,
+                )
+
+                base_name_to_staves[nm] = [new_staff]
                 base_name_to_part[nm] = new_part
                 keys_order.append(nm)
 
@@ -733,21 +750,23 @@ def main():
                 donor_placeholders = _build_placeholders_from_reference(donor_ref_staff)
 
             for nm in keys_order:
-                bs = base_name_to_staff.get(nm)
-                if bs is None:
+                base_staves = base_name_to_staves.get(nm)
+                if base_staves is None:
                     continue
 
-                if nm in donor_name_to_staff:
-                    ds = donor_name_to_staff[nm]
-                    for ch in list(ds):
-                        if ch.tag == "VBox":
-                            if primary_staff is not None:
-                                primary_staff.append(deepcopy(ch))
-                            continue
-                        bs.append(deepcopy(ch))
+                if nm in donor_name_to_staves:
+                    donor_staves = donor_name_to_staves[nm]
+                    for bs, ds in zip(base_staves, donor_staves):
+                        for ch in list(ds):
+                            if ch.tag == "VBox":
+                                if primary_staff is not None:
+                                    primary_staff.append(deepcopy(ch))
+                                continue
+                            bs.append(deepcopy(ch))
                 else:
-                    for ph in donor_placeholders:
-                        bs.append(deepcopy(ph))
+                    for bs in base_staves:
+                        for ph in donor_placeholders:
+                            bs.append(deepcopy(ph))
 
         score = get_score(base_root)
         reorder_staves_to_match_parts_soloists_first(score)
