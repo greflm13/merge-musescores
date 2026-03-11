@@ -718,7 +718,7 @@ def main():
                     insert_break(lm)
 
             donor_first_name = donor_names_order[0] if donor_names_order else None
-            donor_first_staff = donor_name_to_staves.get(donor_first_name)[0] if donor_first_name else None
+            donor_first_staff = donor_name_to_staves.get(donor_first_name, [])[0] if donor_first_name else None
 
             base_names = set(keys_order)
             new_voices = [nm for nm in donor_names_order if nm not in base_names]
