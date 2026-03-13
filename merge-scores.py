@@ -541,8 +541,8 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
     Create per-measure placeholder clones that preserve *actual* measure length.
     Handles pickup measures by respecting <Measure len="X/Y"> if present.
 
-    Also copies LayoutBreaks and ensures an end BarLine exists so section
-    boundaries remain consistent across all staffs.
+    LayoutBreaks and end BarLines are copied from the reference measure so
+    section boundaries remain consistent across all staffs.
     """
 
     ref_ms = get_measures(ref_staff)
@@ -566,25 +566,67 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
                 cp.insert(insert_index, deepcopy(ch))
                 insert_index += 1
 
-        voice = cp.find("voice")
-        if voice is not None:
-            has_end_barline = False
+        src_voice = m.find("voice")
+        dst_voice = cp.find("voice")
 
-            for bl in voice.findall("BarLine"):
+        if src_voice is not None and dst_voice is not None:
+            for bl in src_voice.findall("BarLine"):
                 st = bl.find("subtype")
                 if st is not None and (st.text or "").strip() == "end":
-                    has_end_barline = True
-                    break
-
-            if not has_end_barline:
-                bl = ET.Element("BarLine")
-                st = ET.SubElement(bl, "subtype")
-                st.text = "end"
-                voice.append(bl)
+                    dst_voice.append(deepcopy(bl))
 
         placeholders.append(cp)
 
     return placeholders
+
+
+def relocate_system_spanners_to_first_staff(score: ET.Element):
+    """
+    Move system spanners (Volta, GradualTempoChange, etc.)
+    to the first staff so they remain visible when solo staves hide.
+    """
+
+    staves = [s for s in score if s.tag == "Staff" and "id" in s.attrib]
+    if not staves:
+        return
+
+    first_staff = staves[0]
+    first_measures = get_measures(first_staff)
+
+    SYSTEM_SPANNERS = {"Volta", "GradualTempoChange"}
+
+    for staff in staves[1:]:
+        measures = get_measures(staff)
+
+        for i, m in enumerate(measures):
+            if i >= len(first_measures):
+                continue
+
+            voice = m.find("voice")
+            if voice is None:
+                continue
+
+            dst_voice = first_measures[i].find("voice")
+            if dst_voice is None:
+                continue
+
+            for el in list(voice):
+                if el.tag != "Spanner":
+                    continue
+
+                if el.get("type") not in SYSTEM_SPANNERS:
+                    continue
+
+                sp_type = el.get("type")
+
+                if sp_type is None:
+                    continue
+
+                if el.find(sp_type) is None and el.find("prev") is None:
+                    continue
+
+                voice.remove(el)
+                dst_voice.insert(0, el)
 
 
 def create_new_voice(
@@ -862,6 +904,7 @@ def main():
         renumber_staff_ids_sequential(score)
         reorder_parts_inplace(score)
         relocate_vboxes_to_first_staff_by_measure_ordinal(score)
+        relocate_system_spanners_to_first_staff(score)
         hide_empty_voices(score)
 
         buf = io.BytesIO()
