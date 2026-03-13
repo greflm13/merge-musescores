@@ -185,34 +185,82 @@ def has_section_break(m: ET.Element) -> bool:
     for ch in m:
         if ch.tag != "LayoutBreak":
             continue
-        t = ch.get("type")
-        if t and t.lower() == "section":
-            return True
         for sub in ch:
             if sub.tag == "subtype" and (sub.text or "").strip().lower() == "section":
                 return True
     return False
 
 
+def ensure_measure_end_barline(m: ET.Element):
+    """
+    Ensure the first voice of the measure contains:
+        <BarLine><subtype>end</subtype></BarLine>
+    """
+
+    voice = m.find("voice")
+    if voice is None:
+        return
+
+    # already present?
+    for bl in voice.findall("BarLine"):
+        st = bl.find("subtype")
+        if st is not None and (st.text or "").strip() == "end":
+            return
+
+    bl = ET.Element("BarLine")
+    st = ET.SubElement(bl, "subtype")
+    st.text = "end"
+
+    voice.append(bl)
+
+
+def ensure_end_barline(m: ET.Element):
+    """
+    Ensure the first <voice> in the measure ends with:
+        <BarLine><subtype>end</subtype></BarLine>
+    """
+    voice = m.find("voice")
+    if voice is None:
+        return
+
+    for bl in voice.findall("BarLine"):
+        st = bl.find("subtype")
+        if st is not None and (st.text or "").strip() == "end":
+            return
+
+    bl = ET.Element("BarLine")
+    st = ET.SubElement(bl, "subtype")
+    st.text = "end"
+    voice.append(bl)
+
+
 def insert_break(m: ET.Element):
     if has_section_break(m):
+        ensure_end_barline(m)
         return
+
     lb = create_section_break()
+
     kids = list(m)
     eid_i = None
     v_i = None
+
     for i, ch in enumerate(kids):
         if ch.tag == "eid":
             eid_i = i
         if ch.tag == "voice" and v_i is None:
             v_i = i
+
     if v_i is not None:
         idx = v_i
         if eid_i is not None and eid_i < v_i:
             idx = eid_i + 1
     else:
         idx = (eid_i + 1) if eid_i is not None else 0
+
     m.insert(idx, lb)
+
+    ensure_end_barline(m)
 
 
 def last_measure(staff: Optional[ET.Element]) -> Optional[ET.Element]:
@@ -492,17 +540,50 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
     """
     Create per-measure placeholder clones that preserve *actual* measure length.
     Handles pickup measures by respecting <Measure len="X/Y"> if present.
+
+    Also copies LayoutBreaks and ensures an end BarLine exists so section
+    boundaries remain consistent across all staffs.
     """
+
     ref_ms = get_measures(ref_staff)
+
     placeholders: List[ET.Element] = []
     current_ts = ""
+
     for m in ref_ms:
         if "len" in m.attrib:
             ts = m.attrib["len"]
         else:
             ts = measure_timesig_str(m, current_ts)
+
         current_ts = ts
-        placeholders.append(clone_placeholder(m, ts))
+
+        cp = clone_placeholder(m, ts)
+
+        insert_index = 0
+        for ch in m:
+            if ch.tag == "LayoutBreak":
+                cp.insert(insert_index, deepcopy(ch))
+                insert_index += 1
+
+        voice = cp.find("voice")
+        if voice is not None:
+            has_end_barline = False
+
+            for bl in voice.findall("BarLine"):
+                st = bl.find("subtype")
+                if st is not None and (st.text or "").strip() == "end":
+                    has_end_barline = True
+                    break
+
+            if not has_end_barline:
+                bl = ET.Element("BarLine")
+                st = ET.SubElement(bl, "subtype")
+                st.text = "end"
+                voice.append(bl)
+
+        placeholders.append(cp)
+
     return placeholders
 
 
@@ -712,10 +793,18 @@ def main():
                 if systemlock is not None and system_locks is not None:
                     systemlock.extend(system_locks)
 
-            if primary_staff is not None:
-                lm = last_measure(primary_staff)
-                if lm is not None:
-                    insert_break(lm)
+            score = get_score(base_root)
+
+            for staff in score.findall("Staff"):
+                if "id" not in staff.attrib:
+                    continue
+
+                lm = last_measure(staff)
+                if lm is None:
+                    continue
+
+                insert_break(lm)
+                ensure_measure_end_barline(lm)
 
             donor_first_name = donor_names_order[0] if donor_names_order else None
             donor_first_staff = donor_name_to_staves.get(donor_first_name, [])[0] if donor_first_name else None
