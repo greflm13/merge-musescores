@@ -646,6 +646,44 @@ def relocate_system_spanners_to_first_staff(score: ET.Element):
                 dst_voice.insert(0, el)
 
 
+def relocate_system_texts_to_first_staff(score: ET.Element):
+    """
+    Move system text (Tempo etc.)
+    to the first staff so they remain visible when solo staves hide.
+    """
+
+    staves = [s for s in score if s.tag == "Staff" and "id" in s.attrib]
+    if not staves:
+        return
+
+    first_staff = staves[0]
+    first_measures = get_measures(first_staff)
+
+    SYSTEM_TEXTS = {"Tempo"}
+
+    for staff in staves[1:]:
+        measures = get_measures(staff)
+
+        for i, m in enumerate(measures):
+            if i >= len(first_measures):
+                continue
+
+            voice = m.find("voice")
+            if voice is None:
+                continue
+
+            dst_voice = first_measures[i].find("voice")
+            if dst_voice is None:
+                continue
+
+            for el in list(voice):
+                if el.tag not in SYSTEM_TEXTS:
+                    continue
+
+                voice.remove(el)
+                dst_voice.insert(0, el)
+
+
 def create_new_voice(
     base_root: ET.Element,
     donor_root: ET.Element,
@@ -907,10 +945,6 @@ def main():
                     donor_staves = donor_name_to_staves[nm]
                     for bs, ds in zip(base_staves, donor_staves):
                         for ch in list(ds):
-                            # if ch.tag == "VBox":
-                            #     if primary_staff is not None:
-                            #         primary_staff.append(deepcopy(ch))
-                            #     continue
                             bs.append(deepcopy(ch))
                 else:
                     for bs in base_staves:
@@ -923,6 +957,7 @@ def main():
         reorder_parts_inplace(score)
         relocate_vboxes_to_first_staff_by_measure_ordinal(score)
         relocate_system_spanners_to_first_staff(score)
+        relocate_system_texts_to_first_staff(score)
         hide_empty_voices(score)
 
         buf = io.BytesIO()
