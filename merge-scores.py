@@ -60,7 +60,6 @@ def extract_longname(part: ET.Element) -> Optional[str]:
 
 
 def index_single_staff_parts(root: ET.Element, file: str):
-
     score = get_score(root)
     parts = list(score.findall("Part"))
 
@@ -181,12 +180,29 @@ def create_section_break() -> ET.Element:
     return lb
 
 
+def create_page_break() -> ET.Element:
+    lb = ET.Element("LayoutBreak")
+    st = ET.SubElement(lb, "subtype")
+    st.text = "page"
+    return lb
+
+
 def has_section_break(m: ET.Element) -> bool:
     for ch in m:
         if ch.tag != "LayoutBreak":
             continue
         for sub in ch:
             if sub.tag == "subtype" and (sub.text or "").strip().lower() == "section":
+                return True
+    return False
+
+
+def has_page_break(m: ET.Element) -> bool:
+    for ch in m:
+        if ch.tag != "LayoutBreak":
+            continue
+        for sub in ch:
+            if sub.tag == "subtype" and (sub.text or "").strip().lower() == "page":
                 return True
     return False
 
@@ -234,12 +250,17 @@ def ensure_end_barline(m: ET.Element):
     voice.append(bl)
 
 
-def insert_break(m: ET.Element):
+def insert_break(m: ET.Element, p: bool):
     if has_section_break(m):
+        if p:
+            if has_page_break(m):
+                ensure_end_barline(m)
+                return
         ensure_end_barline(m)
         return
 
     lb = create_section_break()
+    pb = create_page_break()
 
     kids = list(m)
     eid_i = None
@@ -258,6 +279,8 @@ def insert_break(m: ET.Element):
     else:
         idx = (eid_i + 1) if eid_i is not None else 0
 
+    if p:
+        m.insert(idx, pb)
     m.insert(idx, lb)
 
     ensure_end_barline(m)
@@ -498,12 +521,6 @@ def relocate_vboxes_to_first_staff_by_measure_ordinal(score: ET.Element):
       - If a VBox had k measures before it on its original staff, insert it
         before the k-th measure of the first staff (k=0 => before first measure).
       - If k >= number of measures in the first staff, append at the end.
-
-    Rationale:
-      - During donor append you keep VBoxes on the same staff as their donor content,
-        so mid-section VBoxes stay adjacent to the correct measure boundary.
-      - After all merges and any reorders/renumbering, you run this pass once to move
-        every VBox onto staff 1 (so they are visible) without drifting by one measure.
     """
     # Score-level staves, in current (final) order
     staves = [el for el in score if el.tag == "Staff" and "id" in el.attrib]
@@ -754,6 +771,7 @@ def main():
     ap = argparse.ArgumentParser(description="Merge MS4 .mscz files")
     ap.add_argument("-o", "--output-name", required=True)
     ap.add_argument("-D", "--output-dir", default=".")
+    ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
     ap.add_argument("file", nargs="+")
     args = ap.parse_args()
 
@@ -845,7 +863,7 @@ def main():
                 if lm is None:
                     continue
 
-                insert_break(lm)
+                insert_break(lm, args.new_page)
                 ensure_measure_end_barline(lm)
 
             donor_first_name = donor_names_order[0] if donor_names_order else None
@@ -889,10 +907,10 @@ def main():
                     donor_staves = donor_name_to_staves[nm]
                     for bs, ds in zip(base_staves, donor_staves):
                         for ch in list(ds):
-                            if ch.tag == "VBox":
-                                if primary_staff is not None:
-                                    primary_staff.append(deepcopy(ch))
-                                continue
+                            # if ch.tag == "VBox":
+                            #     if primary_staff is not None:
+                            #         primary_staff.append(deepcopy(ch))
+                            #     continue
                             bs.append(deepcopy(ch))
                 else:
                     for bs in base_staves:
