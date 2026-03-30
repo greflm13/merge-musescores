@@ -475,12 +475,12 @@ def renumber_staff_ids_sequential(score: ET.Element):
 # --------------------------
 
 
-def remove_vboxes(staff: Optional[ET.Element]) -> int:
+def remove_hvboxes(staff: Optional[ET.Element]) -> int:
     if staff is None:
         return 0
     removed = 0
     for ch in list(staff):
-        if ch.tag == "VBox":
+        if ch.tag == "VBox" or ch.tag == "HBox":
             staff.remove(ch)
             removed += 1
     return removed
@@ -514,12 +514,12 @@ def insert_before_measure_ordinal(first_staff: ET.Element, m: int, vb: ET.Elemen
     first_staff.append(vb)
 
 
-def relocate_vboxes_to_first_staff_by_measure_ordinal(score: ET.Element):
+def relocate_hvboxes_to_first_staff_by_measure_ordinal(score: ET.Element):
     """
-    Collect all VBoxes from all score-level staves and reinsert them into the
+    Collect all H/VBoxes from all score-level staves and reinsert them into the
     final first staff (current score order), preserving *measure ordinal*:
-      - If a VBox had k measures before it on its original staff, insert it
-        before the k-th measure of the first staff (k=0 => before first measure).
+      - If a H/VBox had k measures before it on its original staff, insert it
+        after the k-th measure of the first staff (k=0 => before first measure).
       - If k >= number of measures in the first staff, append at the end.
     """
     # Score-level staves, in current (final) order
@@ -529,12 +529,15 @@ def relocate_vboxes_to_first_staff_by_measure_ordinal(score: ET.Element):
     first_staff = staves[0]
 
     vboxes = []
+    hboxes = []
     for staff in staves:
         for ch in list(staff):
             if ch.tag == "VBox":
                 vboxes.append((measure_index_of_node(staff, ch), ch, staff))
+            elif ch.tag == "HBox":
+                hboxes.append((measure_index_of_node(staff, ch), ch, staff))
 
-    if not vboxes:
+    if not vboxes and not hboxes:
         return
 
     for _, vb, src_staff in vboxes:
@@ -542,10 +545,19 @@ def relocate_vboxes_to_first_staff_by_measure_ordinal(score: ET.Element):
             src_staff.remove(vb)
         except Exception:
             pass
+    
+    for _, hb, src_staff in hboxes:
+        try:
+            src_staff.remove(hb)
+        except Exception:
+            pass
 
     vboxes_sorted = sorted(enumerate(vboxes), key=lambda t: (t[1][0], t[0]))
-    for _, (m_idx, vb, _src) in vboxes_sorted:
+    hboxes_sorted = sorted(enumerate(hboxes), key=lambda t: (t[1][0], t[0]))
+    for _, (m_idx, vb, _) in vboxes_sorted:
         insert_before_measure_ordinal(first_staff, m_idx, vb)
+    for _, (m_idx, hb, _) in hboxes_sorted:
+        insert_before_measure_ordinal(first_staff, m_idx, hb)
 
 
 # --------------------------
@@ -722,7 +734,7 @@ def create_new_voice(
         for ph in placeholders:
             new_staff.append(ph)
 
-    remove_vboxes(new_staff)
+    remove_hvboxes(new_staff)
 
     base_order = find_order(score)
     donor_order = find_order(get_score(donor_root))
@@ -883,15 +895,17 @@ def main():
                 donor_root, donor_path
             )
 
+            score = get_score(base_root)
+
             donor_locks = get_score(donor_root).find("SystemLocks")
             if donor_locks is not None:
-                system_locks = donor_locks.findall("systemLock")
-                systemlock = get_score(base_root).find("SystemLocks")
+                donor_system_locks = donor_locks.findall("systemLock")
+                base_systemlock = score.find("SystemLocks")
 
-                if systemlock is not None and system_locks is not None:
-                    systemlock.extend(system_locks)
-
-            score = get_score(base_root)
+                if base_systemlock is not None and donor_system_locks is not None:
+                    base_systemlock.extend(donor_system_locks)
+                elif base_systemlock is None and donor_system_locks is not None:
+                    score.append(deepcopy(donor_locks))
 
             for staff in score.findall("Staff"):
                 if "id" not in staff.attrib:
@@ -955,12 +969,13 @@ def main():
         reorder_staves_to_match_parts_soloists_first(score)
         renumber_staff_ids_sequential(score)
         reorder_parts_inplace(score)
-        relocate_vboxes_to_first_staff_by_measure_ordinal(score)
+        relocate_hvboxes_to_first_staff_by_measure_ordinal(score)
         relocate_system_spanners_to_first_staff(score)
         relocate_system_texts_to_first_staff(score)
         hide_empty_voices(score)
 
         buf = io.BytesIO()
+        ET.indent(base_tree)
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
         open(base_mscx, "wb").write(buf.getvalue())
 

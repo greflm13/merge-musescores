@@ -20,9 +20,7 @@
                 "args": [
                     "-o",
                     "Merged",
-                    "Test1.mscz",
-                    "Test2.mscz",
-                    "Test3.mscz"
+                    "filelist"
                 ]
             }
         ]
