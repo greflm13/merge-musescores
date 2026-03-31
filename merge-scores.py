@@ -37,6 +37,37 @@ class JSONFormatter(logging.Formatter):
             "function": record.funcName,
             "line": record.lineno,
         }
+
+        # Add any extra fields passed via extra parameter
+        standard_fields = {
+            "name",
+            "msg",
+            "args",
+            "levelname",
+            "levelno",
+            "pathname",
+            "filename",
+            "module",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "lineno",
+            "funcName",
+            "created",
+            "msecs",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "processName",
+            "process",
+            "message",
+            "asctime",
+        }
+
+        for key, value in record.__dict__.items():
+            if key not in standard_fields:
+                log_entry[key] = value
+
         return json.dumps(log_entry)
 
 
@@ -133,10 +164,10 @@ def extract_longname(part: ET.Element) -> Optional[str]:
 def index_single_staff_parts(
     root: ET.Element, file: str
 ) -> tuple[Dict[str, ET.Element[str]], list[str], Dict[str, List[ET.Element[str]]], dict[str, ET.Element[str]]]:
-    logger.debug(f"Indexing parts for file: {file}")
+    logger.debug("Indexing parts for file", extra={"file": file})
     score = get_score(root)
     parts = list(score.findall("Part"))
-    logger.debug(f"Found {len(parts)} parts")
+    logger.debug("Found parts", extra={"parts_count": len(parts)})
 
     name_to_part: Dict[str, ET.Element] = {}
     name_list: List[str] = []
@@ -145,18 +176,18 @@ def index_single_staff_parts(
         name = extract_longname(p)
 
         if not name:
-            logger.warning(f"Part without longName skipped. {file}")
+            logger.warning("Part without longName skipped", extra={"file": file})
             continue
 
         if name in name_to_part:
-            logger.warning(f"Duplicate longName '{name}' skipped. {file}")
+            logger.warning("Duplicate longName skipped", extra={"name": name, "file": file})
             continue
 
         name_to_part[name] = p
         name_list.append(name)
 
     score_staves = [s for s in score.findall("Staff") if "id" in s.attrib]
-    logger.debug(f"Found {len(score_staves)} score staves")
+    logger.debug("Found score staves", extra={"staves_count": len(score_staves)})
 
     name_to_staves: Dict[str, List[ET.Element]] = {}
 
@@ -167,10 +198,10 @@ def index_single_staff_parts(
 
         templates = part.findall("Staff")
         count = len(templates)
-        logger.debug(f"Part '{name}' has {count} staff templates")
+        logger.debug("Part staff templates", extra={"part_name": name, "template_count": count})
 
         if cursor + count > len(score_staves):
-            logger.warning(f"staff mismatch. {file}")
+            logger.warning("Staff mismatch", extra={"file": file})
             break
 
         name_to_staves[name] = score_staves[cursor : cursor + count]
@@ -180,7 +211,7 @@ def index_single_staff_parts(
     staff_by_id = {s.attrib["id"]: s for s in score_staves}
 
     final_names = [nm for nm in name_list if nm in name_to_staves]
-    logger.debug(f"Final indexed parts: {final_names}")
+    logger.debug("Final indexed parts", extra={"final_names": final_names})
 
     return name_to_part, final_names, name_to_staves, staff_by_id
 
@@ -213,7 +244,7 @@ def measure_timesig_str(ms: ET.Element, fallback_ts: str) -> str:
 
 
 def strip_measure(measure: ET.Element, timesig: str) -> None:
-    logger.debug(f"Stripping measure to placeholder with timesig: {timesig}")
+    logger.debug("Stripping measure to placeholder", extra={"timesig": timesig})
     voices = measure.findall("voice")
     measure_len = measure.get("len")
     if measure_len:
@@ -238,9 +269,10 @@ def strip_measure(measure: ET.Element, timesig: str) -> None:
 
 
 def clone_placeholder(m: ET.Element, ts: str) -> ET.Element:
-    logger.debug("Cloning placeholder measure")
+    logger.debug("Cloning placeholder measure", extra={"original_timesig": ts})
     cp = deepcopy(m)
     strip_measure(cp, ts)
+    logger.debug("Placeholder measure cloned and stripped")
     return cp
 
 
@@ -329,7 +361,7 @@ def ensure_end_barline(m: ET.Element) -> None:
 
 
 def insert_break(m: ET.Element, p: bool) -> None:
-    logger.debug(f"Inserting break into measure, page_break={p}")
+    logger.debug("Inserting break into measure", extra={"page_break": p})
     if has_section_break(m):
         if p:
             if has_page_break(m):
@@ -407,7 +439,7 @@ def hide_empty_voices(score: ET.Element) -> None:
         if part.find("hideWhenEmpty") is None:
             part.append(he)
             added += 1
-    logger.debug(f"Added hideWhenEmpty to {added} parts")
+    logger.debug("Added hideWhenEmpty to parts", extra={"added_count": added})
 
 
 def find_order(score: ET.Element) -> Optional[ET.Element]:
@@ -446,7 +478,8 @@ def reorder_parts_inplace(score: ET.Element) -> None:
     """
 
     parts = [el for el in score if el.tag == "Part"]
-    logger.debug(f"Reordering {len(parts)} parts, {len([p for p in parts if _is_solo_part(p)])} are soloists")
+    soloists_count = len([p for p in parts if _is_solo_part(p)])
+    logger.debug("Reordering parts", extra={"parts_count": len(parts), "soloists_count": soloists_count})
 
     solo = [p for p in parts if _is_solo_part(p)]
     non = [p for p in parts if not _is_solo_part(p)]
@@ -473,7 +506,7 @@ def reorder_parts_inplace(score: ET.Element) -> None:
         children = list(score)
         moves += 1
 
-    logger.debug(f"Performed {moves} part reordering moves")
+    logger.debug("Performed part reordering moves", extra={"moves_count": moves})
 
 
 def _is_solo_part(p: ET.Element) -> bool:
@@ -497,9 +530,12 @@ def compute_soloist_permutation_from_current_parts(score: ET.Element) -> list[in
     We only read current XML state; no reliance on name_to_* maps.
     """
     parts = _collect_parts(score)
+    logger.debug("Computing soloist permutation", extra={"total_parts": len(parts)})
     solo_idx = [i for i, p in enumerate(parts) if _is_solo_part(p)]
     non_idx = [i for i in range(len(parts)) if i not in solo_idx]
-    return solo_idx + non_idx
+    permutation = solo_idx + non_idx
+    logger.debug("Soloist permutation computed", extra={"solo_indices": solo_idx, "non_solo_indices": non_idx, "final_permutation": permutation})
+    return permutation
 
 
 def _reorder_block_inplace_by_permutation(
@@ -510,12 +546,15 @@ def _reorder_block_inplace_by_permutation(
     was computed on the *Parts*. 'base_elems' must be a snapshot of the block BEFORE any moves.
     We use remove+insert for a single node at a time to avoid duplicates.
     """
+    logger.debug("Reordering block by permutation", extra={"tag": tag, "element_count": len(base_elems), "permutation": perm})
     children = list(score)
     tag_positions = [i for i, ch in enumerate(children) if ch.tag == tag]
 
     desired = [base_elems[i] for i in perm if i < len(base_elems)]
+    logger.debug("Desired element order computed", extra={"desired_count": len(desired)})
 
     pos_iter = iter(tag_positions)
+    moves = 0
     for node in desired:
         try:
             target_pos = next(pos_iter)
@@ -525,6 +564,9 @@ def _reorder_block_inplace_by_permutation(
             continue
         score.remove(node)
         score.insert(target_pos, node)
+        moves += 1
+
+    logger.debug("Block reordering completed", extra={"moves_made": moves})
 
 
 def reorder_staves_to_match_parts_soloists_first(score: ET.Element) -> None:
@@ -534,13 +576,13 @@ def reorder_staves_to_match_parts_soloists_first(score: ET.Element) -> None:
     """
     parts_snapshot = _collect_parts(score)
     staves_snapshot = _collect_score_staves(score)
-    logger.debug(f"Reordering {len(staves_snapshot)} staves to match {len(parts_snapshot)} parts")
+    logger.debug("Reordering staves to match parts", extra={"staves_count": len(staves_snapshot), "parts_count": len(parts_snapshot)})
     if not parts_snapshot or not staves_snapshot:
         logger.debug("No parts or staves to reorder")
         return
 
     perm = compute_soloist_permutation_from_current_parts(score)
-    logger.debug(f"Computed permutation: {perm}")
+    logger.debug("Computed permutation", extra={"permutation": perm})
     _reorder_block_inplace_by_permutation(score, "Staff", staves_snapshot, perm)
 
 
@@ -550,11 +592,11 @@ def renumber_staff_ids_sequential(score: ET.Element) -> None:
     Does NOT touch <Part id>.
     """
     staves = _collect_score_staves(score)
-    logger.debug(f"Renumbering {len(staves)} staff IDs sequentially")
+    logger.debug("Renumbering staff IDs sequentially", extra={"staves_count": len(staves)})
     for i, st in enumerate(staves, start=1):
         old_id = st.get("id")
         st.set("id", str(i))
-        logger.debug(f"Staff ID {old_id} -> {i}")
+        logger.debug("Staff ID change", extra={"old_id": old_id, "new_id": i})
 
 
 # --------------------------
@@ -624,7 +666,7 @@ def relocate_hvboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> Non
             elif ch.tag == "HBox":
                 hboxes.append((measure_index_of_node(staff, ch), ch, staff))
 
-    logger.debug(f"Found {len(vboxes)} VBoxes and {len(hboxes)} HBoxes to relocate")
+    logger.debug("Found boxes to relocate", extra={"vboxes_count": len(vboxes), "hboxes_count": len(hboxes)})
 
     if not vboxes and not hboxes:
         return
@@ -644,10 +686,10 @@ def relocate_hvboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> Non
     vboxes_sorted = sorted(enumerate(vboxes), key=lambda t: (t[1][0], t[0]))
     hboxes_sorted = sorted(enumerate(hboxes), key=lambda t: (t[1][0], t[0]))
     for _, (m_idx, vb, _) in vboxes_sorted:
-        logger.debug(f"Inserting VBox at measure ordinal {m_idx}")
+        logger.debug("Inserting VBox at measure ordinal", extra={"measure_ordinal": m_idx})
         insert_before_measure_ordinal(first_staff, m_idx, vb)
     for _, (m_idx, hb, _) in hboxes_sorted:
-        logger.debug(f"Inserting HBox at measure ordinal {m_idx}")
+        logger.debug("Inserting HBox at measure ordinal", extra={"measure_ordinal": m_idx})
         insert_before_measure_ordinal(first_staff, m_idx, hb)
 
 
@@ -666,7 +708,7 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
     """
 
     ref_ms = get_measures(ref_staff)
-    logger.debug(f"Building placeholders from {len(ref_ms)} reference measures")
+    logger.debug("Building placeholders from reference measures", extra={"reference_measures_count": len(ref_ms)})
 
     placeholders: List[ET.Element] = []
     current_ts = ""
@@ -678,28 +720,34 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
             ts = measure_timesig_str(m, current_ts)
 
         current_ts = ts
-        logger.debug(f"Measure {i + 1}: timesig={ts}")
+        logger.debug("Measure timesig", extra={"measure_number": i + 1, "timesig": ts})
 
         cp = clone_placeholder(m, ts)
 
         insert_index = 0
+        layout_breaks_copied = 0
         for ch in m:
             if ch.tag == "LayoutBreak":
                 cp.insert(insert_index, deepcopy(ch))
                 insert_index += 1
+                layout_breaks_copied += 1
 
         src_voice = m.find("voice")
         dst_voice = cp.find("voice")
 
+        barlines_copied = 0
         if src_voice is not None and dst_voice is not None:
             for bl in src_voice.findall("BarLine"):
                 st = bl.find("subtype")
                 if st is not None and (st.text or "").strip() == "end":
                     dst_voice.append(deepcopy(bl))
+                    barlines_copied += 1
+
+        logger.debug("Placeholder built for measure", extra={"measure_number": i + 1, "layout_breaks_copied": layout_breaks_copied, "barlines_copied": barlines_copied})
 
         placeholders.append(cp)
 
-    logger.debug(f"Built {len(placeholders)} placeholders")
+    logger.debug("Built placeholders", extra={"placeholders_count": len(placeholders)})
     return placeholders
 
 
@@ -716,16 +764,19 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
 
     first_staff = staves[0]
     first_measures = get_measures(first_staff)
-    logger.debug(f"Relocating system spanners from {len(staves) - 1} staves to first staff")
+    logger.debug("Relocating system spanners to first staff", extra={"source_staves_count": len(staves) - 1})
 
     SYSTEM_SPANNERS = {"Volta", "GradualTempoChange"}
     relocated_count = 0
 
-    for staff in staves[1:]:
+    logger.debug("Scanning staves for system spanners", extra={"staves_to_scan": len(staves) - 1})
+    for staff_idx, staff in enumerate(staves[1:], start=2):  # start=2 because we skip first staff
         measures = get_measures(staff)
+        logger.debug("Scanning staff for spanners", extra={"staff_id": staff.get("id"), "measures_count": len(measures)})
 
         for i, m in enumerate(measures):
             if i >= len(first_measures):
+                logger.debug("Skipping measure beyond first staff length", extra={"measure_index": i, "first_staff_measures": len(first_measures)})
                 continue
 
             voice = m.find("voice")
@@ -751,12 +802,12 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
                 if el.find(sp_type) is None and el.find("prev") is None:
                     continue
 
-                logger.debug(f"Relocating {sp_type} spanner from staff to first staff")
+                logger.debug("Relocating spanner from staff to first staff", extra={"spanner_type": sp_type, "staff_id": staff.get("id"), "measure_index": i})
                 voice.remove(el)
                 dst_voice.insert(0, el)
                 relocated_count += 1
 
-    logger.debug(f"Relocated {relocated_count} system spanners")
+    logger.debug("Relocated system spanners", extra={"relocated_count": relocated_count})
 
 
 def relocate_system_texts_to_first_staff(score: ET.Element) -> None:
@@ -772,13 +823,15 @@ def relocate_system_texts_to_first_staff(score: ET.Element) -> None:
 
     first_staff = staves[0]
     first_measures = get_measures(first_staff)
-    logger.debug(f"Relocating system texts from {len(staves) - 1} staves to first staff")
+    logger.debug("Relocating system texts to first staff", extra={"source_staves_count": len(staves) - 1})
 
     SYSTEM_TEXTS = {"Tempo"}
     relocated_count = 0
 
-    for staff in staves[1:]:
+    logger.debug("Scanning staves for system texts", extra={"staves_to_scan": len(staves) - 1})
+    for staff_idx, staff in enumerate(staves[1:], start=2):  # start=2 because we skip first staff
         measures = get_measures(staff)
+        logger.debug("Scanning staff for texts", extra={"staff_id": staff.get("id"), "measures_count": len(measures)})
 
         for i, m in enumerate(measures):
             if i >= len(first_measures):
@@ -796,12 +849,12 @@ def relocate_system_texts_to_first_staff(score: ET.Element) -> None:
                 if el.tag not in SYSTEM_TEXTS:
                     continue
 
-                logger.debug(f"Relocating {el.tag} text from staff to first staff")
+                logger.debug("Relocating text from staff to first staff", extra={"element_tag": el.tag, "staff_id": staff.get("id"), "measure_index": i})
                 voice.remove(el)
                 dst_voice.insert(0, el)
                 relocated_count += 1
 
-    logger.debug(f"Relocated {relocated_count} system texts")
+    logger.debug("Relocated system texts", extra={"relocated_count": relocated_count})
 
 
 def create_new_voice(
@@ -813,15 +866,15 @@ def create_new_voice(
     used_staff_ids: Set[str],
     primary_staff: Optional[ET.Element],
 ) -> tuple[ET.Element[str], ET.Element[str]]:
-    logger.debug(f"Creating new voice: {longName}")
+    logger.debug("Creating new voice", extra={"longName": longName})
     score = get_score(base_root)
     new_part = deepcopy(donor_part)
     new_id = next_id(used_staff_ids)
-    logger.debug(f"New part ID: {new_id}")
+    logger.debug("New part ID", extra={"new_id": new_id})
     new_part.set("id", new_id)
 
     st_templates = new_part.findall("Staff")
-    logger.debug(f"Removing extra staff templates, keeping {len(st_templates)}")
+    logger.debug("Removing extra staff templates", extra={"templates_kept": len(st_templates)})
     for st in st_templates[1:]:
         new_part.remove(st)
 
@@ -830,19 +883,19 @@ def create_new_voice(
         if el.tag == "Staff":
             idx = i
             break
-    logger.debug(f"Inserting new part at index {idx}")
+    logger.debug("Inserting new part at index", extra={"insert_index": idx})
     score.insert(idx, new_part)
 
     new_staff = deepcopy(donor_staff)
     used_staff_ids.add(new_id)
     new_staff.set("id", new_id)
-    logger.debug(f"Appending new staff with ID {new_id}")
+    logger.debug("Appending new staff with ID", extra={"staff_id": new_id})
     score.append(new_staff)
 
     if primary_staff is not None:
         logger.debug("Building placeholders from primary staff")
         placeholders = _build_placeholders_from_reference(primary_staff)
-        logger.debug(f"Removing existing measures and adding {len(placeholders)} placeholders")
+        logger.debug("Removing existing measures and adding placeholders", extra={"placeholders_count": len(placeholders)})
         for dm in list(new_staff):
             if dm.tag == "Measure":
                 new_staff.remove(dm)
@@ -859,7 +912,7 @@ def create_new_voice(
         assert isinstance(instr_id, str)
         exists = any(it.get("id") == instr_id for it in base_order.findall("instrument"))
         if not exists:
-            logger.debug(f"Copying instrument '{instr_id}' into order")
+            logger.debug("Copying instrument into order", extra={"instrument_id": instr_id})
             copy_instrument_into_order(base_order, donor_order, instr_id)
     else:
         logger.warning("Could not locate <Order> in donor/base; instrument stub not copied.")
@@ -894,21 +947,21 @@ def truncate_root(b: bytes) -> bytes:
 
 
 def parse_xml_lenient(b: bytes, label: str) -> ET.ElementTree[ET.Element] | None:
-    logger.debug(f"Parsing XML for {label}, size: {len(b)} bytes")
+    logger.debug("Parsing XML", extra={"label": label, "size_bytes": len(b)})
     parser = ET.XMLParser()
     try:
         logger.debug("Attempting direct XML parse")
         return ET.parse(io.BytesIO(b), parser)
     except ET.ParseError as e:
-        logger.debug(f"Direct parse failed: {e}, trying sanitized")
+        logger.debug("Direct parse failed, trying sanitized", extra={"error": str(e)})
         try:
             return ET.parse(io.BytesIO(sanitize(b)), parser)
         except ET.ParseError as e:
-            logger.debug(f"Sanitized parse failed: {e}, trying truncated")
+            logger.debug("Sanitized parse failed, trying truncated", extra={"error": str(e)})
             try:
                 return ET.parse(io.BytesIO(truncate_root(sanitize(b))), parser)
             except ET.ParseError as e:
-                logger.error(f"Could not parse donor '{label}': {e}")
+                logger.error("Could not parse donor", extra={"label": label, "error": str(e)})
                 return None
 
 
@@ -923,7 +976,7 @@ def ensure_dir(path: str) -> None:
 
 
 def write_zip_from_dir(src_dir: str, out_zip: str) -> None:
-    logger.debug(f"Creating zip from {src_dir} to {out_zip}")
+    logger.debug("Creating zip from directory", extra={"src_dir": src_dir, "out_zip": out_zip})
     ensure_dir(os.path.dirname(os.path.abspath(out_zip)) or ".")
     file_count = 0
     with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -933,7 +986,7 @@ def write_zip_from_dir(src_dir: str, out_zip: str) -> None:
                 rel_path = os.path.relpath(abs_path, src_dir).replace(os.sep, "/")
                 z.write(abs_path, rel_path)
                 file_count += 1
-    logger.debug(f"Added {file_count} files to zip archive")
+    logger.debug("Added files to zip archive", extra={"file_count": file_count})
 
 
 # --------------------------
@@ -953,7 +1006,13 @@ def main() -> int:
 
     logger.info("Starting merge process")
     logger.debug(
-        f"Arguments: output_name={args.output_name}, output_dir={args.output_dir}, new_page={args.new_page}, files={args.file}"
+        "Parsed command line arguments",
+        extra={
+            "output_name": args.output_name,
+            "output_dir": args.output_dir,
+            "new_page": args.new_page,
+            "files": args.file,
+        },
     )
 
     base_zip = os.path.abspath(args.file[0])
@@ -961,89 +1020,98 @@ def main() -> int:
     out_dir = os.path.abspath(args.output_dir)
     out_path = os.path.join(out_dir, f"{args.output_name}.mscz")
 
-    logger.debug(f"Base file: {base_zip}")
-    logger.debug(f"Donor files: {donor_list}")
-    logger.debug(f"Output path: {out_path}")
+    logger.debug("Base file", extra={"base_file": base_zip})
+    logger.debug("Donor files", extra={"donor_files": donor_list})
+    logger.debug("Output path", extra={"output_path": out_path})
 
     if len(donor_list) == 0 and os.path.splitext(base_zip)[1] != ".mscz":
+        logger.debug("Reading donor list from file", extra={"list_file": base_zip})
         with open(base_zip, "r", encoding="utf-8") as f:
             donor_list = [
                 os.path.abspath(os.path.join(".", line.strip())) for line in f.readlines() if len(line.strip()) > 0
             ]
             base_zip = donor_list[0]
             donor_list = donor_list[1:]
+        logger.debug("Resolved files from list", extra={"base_file": base_zip, "donor_files": donor_list})
+
+    logger.debug("Validating file existence")
     if not os.path.isfile(base_zip):
-        logger.error(f"Base file not found: {base_zip}")
+        logger.error("Base file not found", extra={"base_file": base_zip})
         return 66
     for d in donor_list:
         if not os.path.isfile(d):
-            logger.error(f"Donor file not found: {d}")
+            logger.error("Donor file not found", extra={"donor_file": d})
             return 66
+    logger.debug("All input files validated successfully")
 
     work = tempfile.mkdtemp("mscore_merge_")
     base_dir = os.path.join(work, "base")
     ensure_dir(base_dir)
-    logger.debug(f"Working directory: {work}")
+    logger.debug("Working directory", extra={"work_dir": work})
 
     try:
-        logger.debug(f"Extracting base file: {base_zip}")
+        logger.debug("Extracting base file", extra={"base_file": base_zip})
         with zipfile.ZipFile(base_zip, "r") as z:
             z.extractall(base_dir)
             mscx_name = first_mscx_name(z)
             if not mscx_name:
                 logger.error("Base has no .mscx")
                 return 65
-            logger.debug(f"Base MSCX file: {mscx_name}")
+            logger.debug("Base MSCX file", extra={"mscx_name": mscx_name})
 
         base_mscx = os.path.join(base_dir, mscx_name)
-        logger.debug(f"Parsing base MSCX: {base_mscx}")
+        logger.debug("Parsing base MSCX", extra={"base_mscx": base_mscx})
         raw = open(base_mscx, "rb").read()
         base_tree = ET.parse(io.BytesIO(raw))
         base_root = base_tree.getroot()
         logger.debug("Base XML parsed successfully")
 
+        logger.debug("Indexing base score parts")
         base_name_to_part, base_names_order, base_name_to_staves, base_staff_by_id = index_single_staff_parts(
             base_root, base_mscx
         )
         used_staff_ids = set(base_staff_by_id.keys())
-        logger.debug(f"Base parts indexed: {base_names_order}")
-        logger.debug(f"Used staff IDs: {used_staff_ids}")
+        logger.debug("Base parts indexed", extra={"base_names_order": base_names_order})
+        logger.debug("Used staff IDs", extra={"used_staff_ids": list(used_staff_ids)})
 
         solo_base = [nm for nm in base_names_order if _is_solo_part(base_name_to_part[nm])]
         normal_base = [nm for nm in base_names_order if nm not in solo_base]
         keys_order = solo_base + normal_base
-        logger.debug(f"Keys order: {keys_order}")
+        logger.debug("Keys order", extra={"keys_order": keys_order})
 
         primary_staff = base_staff_by_id.get("1")
 
+        logger.debug("Beginning donor processing", extra={"donor_count": len(donor_list)})
         for donor_path in donor_list:
             label = os.path.basename(donor_path)
-            logger.info(f"Processing donor: {label}")
-            logger.debug(f"Donor path: {donor_path}")
+            logger.info("Processing donor", extra={"donor_label": label})
+            logger.debug("Donor path", extra={"donor_path": donor_path})
             try:
-                logger.debug(f"Opening donor zip: {donor_path}")
+                logger.debug("Opening donor zip", extra={"donor_path": donor_path})
                 with zipfile.ZipFile(donor_path, "r") as dz:
                     dn_mscx = first_mscx_name(dz)
                     if not dn_mscx:
-                        logger.warning(f"No .mscx in donor {label}, skipping.")
+                        logger.warning("No .mscx in donor, skipping", extra={"donor_label": label})
                         continue
-                    logger.debug(f"Donor MSCX: {dn_mscx}")
+                    logger.debug("Donor MSCX", extra={"donor_mscx": dn_mscx})
                     donor_bytes = dz.read(dn_mscx)
             except Exception as e:
-                logger.error(f"Could not read donor {label}, skipping. Error: {e}")
+                logger.error("Could not read donor, skipping", extra={"donor_label": label, "error": str(e)})
                 continue
 
             donor_tree = parse_xml_lenient(donor_bytes, label)
             if donor_tree is None:
                 continue
             donor_root = donor_tree.getroot()
-            logger.debug(f"Donor XML parsed successfully for {label}")
+            logger.debug("Donor XML parsed successfully", extra={"donor_label": label})
 
+            logger.debug("Indexing donor score parts", extra={"donor_label": label})
             donor_name_to_part, donor_names_order, donor_name_to_staves, donor_staff_by_id = index_single_staff_parts(
                 donor_root, donor_path
             )
-            logger.debug(f"Donor parts indexed: {donor_names_order}")
+            logger.debug("Donor parts indexed", extra={"donor_names_order": donor_names_order})
 
+            logger.debug("Merging donor into base score", extra={"donor_label": label})
             score = get_score(base_root)
 
             donor_locks = get_score(donor_root).find("SystemLocks")
@@ -1051,7 +1119,7 @@ def main() -> int:
                 donor_system_locks = donor_locks.findall("systemLock")
                 base_systemlock = score.find("SystemLocks")
                 logger.debug(
-                    f"Merging {len(donor_system_locks) if donor_system_locks else 0} system locks from {label}"
+                    "Merging system locks from donor", extra={"system_locks_count": len(donor_system_locks) if donor_system_locks else 0, "donor_label": label}
                 )
 
                 if base_systemlock is not None and donor_system_locks is not None:
@@ -1059,7 +1127,7 @@ def main() -> int:
                 elif base_systemlock is None and donor_system_locks is not None:
                     score.append(deepcopy(donor_locks))
 
-            logger.debug(f"Inserting breaks in base staves for {label}")
+            logger.debug("Inserting breaks in base staves", extra={"donor_label": label})
             for staff in score.findall("Staff"):
                 if "id" not in staff.attrib:
                     continue
@@ -1076,9 +1144,9 @@ def main() -> int:
 
             base_names = set(keys_order)
             new_voices = [nm for nm in donor_names_order if nm not in base_names]
-            logger.debug(f"New voices to create from {label}: {new_voices}")
+            logger.debug("New voices to create from donor", extra={"donor_label": label, "new_voices": new_voices})
             for nm in new_voices:
-                logger.debug(f"Creating new voice: {nm}")
+                logger.debug("Creating new voice", extra={"voice_name": nm})
                 dp = donor_name_to_part[nm]
                 ds = donor_name_to_staves[nm][0]
 
@@ -1099,15 +1167,15 @@ def main() -> int:
                 solo_all = [n for n in keys_order if _is_solo_part(base_name_to_part[n])]
                 normal_all = [n for n in keys_order if n not in solo_all]
                 keys_order = solo_all + normal_all
-                logger.debug(f"Updated keys order: {keys_order}")
+                logger.debug("Updated keys order", extra={"keys_order": keys_order})
 
             donor_ref_staff = donor_first_staff
             donor_placeholders = []
             if donor_ref_staff is not None:
                 donor_placeholders = _build_placeholders_from_reference(donor_ref_staff)
-                logger.debug(f"Built {len(donor_placeholders)} placeholders from donor reference staff")
+                logger.debug("Built placeholders from donor reference staff", extra={"placeholders_count": len(donor_placeholders)})
 
-            logger.debug(f"Appending measures for {label}")
+            logger.debug("Appending measures", extra={"donor_label": label})
             for nm in keys_order:
                 base_staves = base_name_to_staves.get(nm)
                 if base_staves is None:
@@ -1115,18 +1183,19 @@ def main() -> int:
 
                 if nm in donor_name_to_staves:
                     donor_staves = donor_name_to_staves[nm]
-                    logger.debug(f"Appending content for existing voice: {nm}")
+                    logger.debug("Appending content for existing voice", extra={"voice_name": nm})
                     for bs, ds in zip(base_staves, donor_staves):
                         measure_count = len([ch for ch in ds if ch.tag == "Measure"])
-                        logger.debug(f"Appending {measure_count} measures to staff")
+                        logger.debug("Appending measures to staff", extra={"measure_count": measure_count})
                         for ch in list(ds):
                             bs.append(deepcopy(ch))
                 else:
-                    logger.debug(f"Appending placeholders for voice: {nm}")
+                    logger.debug("Appending placeholders for voice", extra={"voice_name": nm})
                     for bs in base_staves:
                         for ph in donor_placeholders:
                             bs.append(deepcopy(ph))
 
+        logger.debug("Beginning final score processing")
         score = get_score(base_root)
         logger.debug("Reordering staves to match parts (soloists first)")
         reorder_staves_to_match_parts_soloists_first(score)
@@ -1150,7 +1219,7 @@ def main() -> int:
         logger.debug("Serializing XML to buffer")
         base_tree.write(buf, encoding="utf-8", xml_declaration=True)
         xml_size = len(buf.getvalue())
-        logger.debug(f"XML size: {xml_size} bytes")
+        logger.debug("XML serialization complete", extra={"xml_size_bytes": xml_size})
         open(base_mscx, "wb").write(buf.getvalue())
 
         logger.debug("Moving MSCX to base directory")
@@ -1158,7 +1227,11 @@ def main() -> int:
         logger.debug("Creating output zip archive")
         ensure_dir(out_dir)
         write_zip_from_dir(base_dir, out_path)
-        logger.info(f"Merged archive created at: {out_path}")
+        logger.info("Merged archive created", extra={"output_path": out_path})
+
+        logger.debug("Cleaning up temporary directory")
+        shutil.rmtree(work)
+        logger.debug("Merge process completed successfully")
 
     finally:
         logger.debug("Cleaning up temporary directory")
