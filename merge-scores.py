@@ -30,12 +30,12 @@ SCRIPTDIR = os.path.dirname(os.path.realpath(__file__)).removesuffix(__package__
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_entry = {
-            "timestamp": self.formatTime(record),
-            "level": record.levelname,
+            "asctime": self.formatTime(record),
+            "levelname": record.levelname,
             "message": record.getMessage(),
             "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno,
+            "funcName": record.funcName,
+            "lineno": record.lineno,
         }
 
         # Add any extra fields passed via extra parameter
@@ -75,7 +75,7 @@ LOG_DIR = os.path.join(SCRIPTDIR, "logs")
 LATEST_LOG_FILE = os.path.join(LOG_DIR, "latest.jsonl")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-logger = logging.getLogger()
+logger = logging.getLogger("defaultlogger")
 
 file_handler = logging.FileHandler(LATEST_LOG_FILE, encoding="utf-8")
 file_handler.setFormatter(JSONFormatter())
@@ -106,7 +106,7 @@ def rotate_log_file(compress=True) -> None:
             first_line = f.readline()
             try:
                 first_log = json.loads(first_line)
-                first_timestamp = first_log.get("timestamp")
+                first_timestamp = first_log.get("asctime")
                 first_timestamp = first_timestamp.split(",")[0]
             except (json.JSONDecodeError, KeyError):
                 first_timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -315,30 +315,6 @@ def has_page_break(m: ET.Element) -> bool:
     return False
 
 
-def ensure_measure_end_barline(m: ET.Element) -> None:
-    """
-    Ensure the first voice of the measure contains:
-        <BarLine><subtype>end</subtype></BarLine>
-    """
-
-    voice = m.find("voice")
-    if voice is None:
-        return
-
-    # already present?
-    for bl in voice.findall("BarLine"):
-        st = bl.find("subtype")
-        if st is not None and (st.text or "").strip() == "end":
-            return
-
-    logger.debug("Adding end barline to measure")
-    bl = ET.Element("BarLine")
-    st = ET.SubElement(bl, "subtype")
-    st.text = "end"
-
-    voice.append(bl)
-
-
 def ensure_end_barline(m: ET.Element) -> None:
     """
     Ensure the first <voice> in the measure ends with:
@@ -534,7 +510,10 @@ def compute_soloist_permutation_from_current_parts(score: ET.Element) -> list[in
     solo_idx = [i for i, p in enumerate(parts) if _is_solo_part(p)]
     non_idx = [i for i in range(len(parts)) if i not in solo_idx]
     permutation = solo_idx + non_idx
-    logger.debug("Soloist permutation computed", extra={"solo_indices": solo_idx, "non_solo_indices": non_idx, "final_permutation": permutation})
+    logger.debug(
+        "Soloist permutation computed",
+        extra={"solo_indices": solo_idx, "non_solo_indices": non_idx, "final_permutation": permutation},
+    )
     return permutation
 
 
@@ -546,7 +525,9 @@ def _reorder_block_inplace_by_permutation(
     was computed on the *Parts*. 'base_elems' must be a snapshot of the block BEFORE any moves.
     We use remove+insert for a single node at a time to avoid duplicates.
     """
-    logger.debug("Reordering block by permutation", extra={"tag": tag, "element_count": len(base_elems), "permutation": perm})
+    logger.debug(
+        "Reordering block by permutation", extra={"tag": tag, "element_count": len(base_elems), "permutation": perm}
+    )
     children = list(score)
     tag_positions = [i for i, ch in enumerate(children) if ch.tag == tag]
 
@@ -576,7 +557,10 @@ def reorder_staves_to_match_parts_soloists_first(score: ET.Element) -> None:
     """
     parts_snapshot = _collect_parts(score)
     staves_snapshot = _collect_score_staves(score)
-    logger.debug("Reordering staves to match parts", extra={"staves_count": len(staves_snapshot), "parts_count": len(parts_snapshot)})
+    logger.debug(
+        "Reordering staves to match parts",
+        extra={"staves_count": len(staves_snapshot), "parts_count": len(parts_snapshot)},
+    )
     if not parts_snapshot or not staves_snapshot:
         logger.debug("No parts or staves to reorder")
         return
@@ -743,7 +727,14 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
                     dst_voice.append(deepcopy(bl))
                     barlines_copied += 1
 
-        logger.debug("Placeholder built for measure", extra={"measure_number": i + 1, "layout_breaks_copied": layout_breaks_copied, "barlines_copied": barlines_copied})
+        logger.debug(
+            "Placeholder built for measure",
+            extra={
+                "measure_number": i + 1,
+                "layout_breaks_copied": layout_breaks_copied,
+                "barlines_copied": barlines_copied,
+            },
+        )
 
         placeholders.append(cp)
 
@@ -772,11 +763,16 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
     logger.debug("Scanning staves for system spanners", extra={"staves_to_scan": len(staves) - 1})
     for staff_idx, staff in enumerate(staves[1:], start=2):  # start=2 because we skip first staff
         measures = get_measures(staff)
-        logger.debug("Scanning staff for spanners", extra={"staff_id": staff.get("id"), "measures_count": len(measures)})
+        logger.debug(
+            "Scanning staff for spanners", extra={"staff_id": staff.get("id"), "measures_count": len(measures)}
+        )
 
         for i, m in enumerate(measures):
             if i >= len(first_measures):
-                logger.debug("Skipping measure beyond first staff length", extra={"measure_index": i, "first_staff_measures": len(first_measures)})
+                logger.debug(
+                    "Skipping measure beyond first staff length",
+                    extra={"measure_index": i, "first_staff_measures": len(first_measures)},
+                )
                 continue
 
             voice = m.find("voice")
@@ -802,7 +798,10 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
                 if el.find(sp_type) is None and el.find("prev") is None:
                     continue
 
-                logger.debug("Relocating spanner from staff to first staff", extra={"spanner_type": sp_type, "staff_id": staff.get("id"), "measure_index": i})
+                logger.debug(
+                    "Relocating spanner from staff to first staff",
+                    extra={"spanner_type": sp_type, "staff_id": staff.get("id"), "measure_index": i},
+                )
                 voice.remove(el)
                 dst_voice.insert(0, el)
                 relocated_count += 1
@@ -849,7 +848,10 @@ def relocate_system_texts_to_first_staff(score: ET.Element) -> None:
                 if el.tag not in SYSTEM_TEXTS:
                     continue
 
-                logger.debug("Relocating text from staff to first staff", extra={"element_tag": el.tag, "staff_id": staff.get("id"), "measure_index": i})
+                logger.debug(
+                    "Relocating text from staff to first staff",
+                    extra={"element_tag": el.tag, "staff_id": staff.get("id"), "measure_index": i},
+                )
                 voice.remove(el)
                 dst_voice.insert(0, el)
                 relocated_count += 1
@@ -895,7 +897,9 @@ def create_new_voice(
     if primary_staff is not None:
         logger.debug("Building placeholders from primary staff")
         placeholders = _build_placeholders_from_reference(primary_staff)
-        logger.debug("Removing existing measures and adding placeholders", extra={"placeholders_count": len(placeholders)})
+        logger.debug(
+            "Removing existing measures and adding placeholders", extra={"placeholders_count": len(placeholders)}
+        )
         for dm in list(new_staff):
             if dm.tag == "Measure":
                 new_staff.remove(dm)
@@ -1119,7 +1123,11 @@ def main() -> int:
                 donor_system_locks = donor_locks.findall("systemLock")
                 base_systemlock = score.find("SystemLocks")
                 logger.debug(
-                    "Merging system locks from donor", extra={"system_locks_count": len(donor_system_locks) if donor_system_locks else 0, "donor_label": label}
+                    "Merging system locks from donor",
+                    extra={
+                        "system_locks_count": len(donor_system_locks) if donor_system_locks else 0,
+                        "donor_label": label,
+                    },
                 )
 
                 if base_systemlock is not None and donor_system_locks is not None:
@@ -1137,7 +1145,6 @@ def main() -> int:
                     continue
 
                 insert_break(lm, args.new_page)
-                ensure_measure_end_barline(lm)
 
             donor_first_name = donor_names_order[0] if donor_names_order else None
             donor_first_staff = donor_name_to_staves.get(donor_first_name, [])[0] if donor_first_name else None
@@ -1173,7 +1180,10 @@ def main() -> int:
             donor_placeholders = []
             if donor_ref_staff is not None:
                 donor_placeholders = _build_placeholders_from_reference(donor_ref_staff)
-                logger.debug("Built placeholders from donor reference staff", extra={"placeholders_count": len(donor_placeholders)})
+                logger.debug(
+                    "Built placeholders from donor reference staff",
+                    extra={"placeholders_count": len(donor_placeholders)},
+                )
 
             logger.debug("Appending measures", extra={"donor_label": label})
             for nm in keys_order:
