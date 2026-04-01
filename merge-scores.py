@@ -31,37 +31,30 @@ class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_entry = {
             "asctime": self.formatTime(record),
-            "levelname": record.levelname,
-            "message": record.getMessage(),
-            "module": record.module,
+            "created": record.created,
+            "filename": record.filename,
             "funcName": record.funcName,
+            "levelname": record.levelname,
+            "levelno": record.levelno,
             "lineno": record.lineno,
+            "module": record.module,
+            "msecs": record.msecs,
+            "message": record.getMessage(),
+            "process": record.process,
+            "processName": record.processName,
+            "relativeCreated": record.relativeCreated,
+            "thread": record.thread,
+            "threadName": record.threadName,
         }
 
+        # fmt: off
         standard_fields = {
-            "name",
-            "msg",
-            "args",
-            "levelname",
-            "levelno",
-            "pathname",
-            "filename",
-            "module",
-            "exc_info",
-            "exc_text",
-            "stack_info",
-            "lineno",
-            "funcName",
-            "created",
-            "msecs",
-            "relativeCreated",
-            "thread",
-            "threadName",
-            "processName",
-            "process",
-            "message",
+            "name", "msg", "args", "levelname", "levelno", "pathname", "filename", "module",
+            "exc_info", "exc_text", "stack_info", "lineno", "funcName", "created", "msecs",
+            "relativeCreated", "thread", "threadName", "processName", "process", "message",
             "asctime",
         }
+        # fmt: on
 
         for key, value in record.__dict__.items():
             if key not in standard_fields:
