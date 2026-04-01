@@ -1235,7 +1235,7 @@ def main() -> int:
         logger.debug("Creating output zip archive")
         ensure_dir(out_dir)
         write_zip_from_dir(base_dir, out_path)
-        logger.info("Merged archive created", extra={"output_path": out_path})
+        logger.info("Merged score created", extra={"output_path": out_path})
 
         logger.debug("Cleaning up temporary directory")
         shutil.rmtree(work)
