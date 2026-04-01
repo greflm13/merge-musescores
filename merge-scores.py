@@ -38,7 +38,6 @@ class JSONFormatter(logging.Formatter):
             "lineno": record.lineno,
         }
 
-        # Add any extra fields passed via extra parameter
         standard_fields = {
             "name",
             "msg",
@@ -114,9 +113,8 @@ def rotate_log_file(compress=True) -> None:
             safe_timestamp = first_timestamp.replace(":", "-").replace(" ", "_")
             old_log_filename = os.path.join(LOG_DIR, f"{safe_timestamp}.jsonl")
 
-            # Write contents to the new file
             with open(old_log_filename, "w", encoding="utf-8") as old_log_file:
-                f.seek(0)  # Go back to the beginning of the file
+                f.seek(0)
                 shutil.copyfileobj(f, old_log_file)
 
             if compress:
@@ -1048,7 +1046,7 @@ def main() -> int:
             return 66
     logger.debug("All input files validated successfully")
 
-    work = tempfile.mkdtemp("mscore_merge_")
+    work = tempfile.mkdtemp(prefix="mscore_merge_")
     base_dir = os.path.join(work, "base")
     ensure_dir(base_dir)
     logger.debug("Working directory", extra={"work_dir": work})
