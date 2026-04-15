@@ -142,7 +142,7 @@ def get_measures(staff: ET.Element) -> List[ET.Element]:
     return [ch for ch in staff if ch.tag == "Measure"]
 
 
-NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef", "subtype", "sigN", "sigD", "concertKey"]
+NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef", "subtype", "sigN", "sigD", "concertKey", "multiMeasureRest"]
 
 
 def measure_timesig_str(ms: ET.Element, fallback_ts: str) -> str:
@@ -617,10 +617,12 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
     for i, m in enumerate(ref_ms):
         if "len" in m.attrib:
             ts = m.attrib["len"]
+            current_ts = ts if current_ts == "" else current_ts
+            current_ts = measure_timesig_str(m, current_ts)
         else:
             ts = measure_timesig_str(m, current_ts)
+            current_ts = ts
 
-        current_ts = ts
         logger.debug("Measure timesig", extra={"measure_number": i + 1, "timesig": ts})
 
         cp = clone_placeholder(m, ts)
@@ -678,7 +680,7 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
     relocated_count = 0
 
     logger.debug("Scanning staves for system spanners", extra={"staves_to_scan": len(staves) - 1})
-    for staff_idx, staff in enumerate(staves[1:], start=2):  # start=2 because we skip first staff
+    for staff in staves[1:]:
         measures = get_measures(staff)
         logger.debug(
             "Scanning staff for spanners", extra={"staff_id": staff.get("id"), "measures_count": len(measures)}
@@ -700,7 +702,7 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
             if dst_voice is None:
                 continue
 
-            for el in list(voice):
+            for idx, el in enumerate(list(voice)):
                 if el.tag != "Spanner":
                     continue
 
@@ -720,7 +722,7 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
                     extra={"spanner_type": sp_type, "staff_id": staff.get("id"), "measure_index": i},
                 )
                 voice.remove(el)
-                dst_voice.insert(0, el)
+                dst_voice.insert(idx, el)
                 relocated_count += 1
 
     logger.debug("Relocated system spanners", extra={"relocated_count": relocated_count})

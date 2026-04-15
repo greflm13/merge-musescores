@@ -7,6 +7,13 @@
     ],
     "settings": {
         "python.analysis.typeCheckingMode": "standard",
+        "python-envs.pythonProjects": [
+            {
+                "path": ".",
+                "envManager": "ms-python.python:pyenv",
+                "packageManager": "ms-python.python:pip"
+            }
+        ]
     },
     "launch": {
         "version": "0.2.0",
