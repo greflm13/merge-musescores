@@ -6,23 +6,35 @@
         }
     ],
     "settings": {
-        "python.analysis.typeCheckingMode": "standard",
+        "ruff.lineLength": 140,
         "python-envs.pythonProjects": [
             {
-                "path": ".",
+                "path": "",
                 "envManager": "ms-python.python:pyenv",
                 "packageManager": "ms-python.python:pip"
             }
+        ],
+        "python.analysis.typeCheckingMode": "standard",
+        "evenBetterToml.schema.associations": {
+            "**/pyproject.toml": "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/pyproject.json"
+        },
+        "files.associations": {
+            "build.spec": "python"
+        }
+    },
+    "extensions": {
+        "recommendations": [
+            "charliermarsh.ruff"
         ]
     },
     "launch": {
         "version": "0.2.0",
         "configurations": [
             {
-                "name": "Python Debugger: Current File with Arguments",
+                "name": "Debug merge-scores",
                 "type": "debugpy",
                 "request": "launch",
-                "program": "merge-scores.py",
+                "program": "${workspaceFolder}/src/merge_scores/main.py",
                 "console": "integratedTerminal",
                 "args": [
                     "-o",

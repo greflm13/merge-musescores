@@ -1,13 +1,20 @@
-import os
-import json
-import gzip
-import shutil
-import logging
 import datetime
+import gzip
+import json
+import logging
+import os
+import platform
+import shutil
+from pathlib import Path
 
-SCRIPTDIR = os.path.dirname(os.path.realpath(__file__)).removesuffix(__package__ if __package__ else "")
-LOG_DIR = os.path.join(SCRIPTDIR, "logs")
-LATEST_LOG_FILE = os.path.join(LOG_DIR, "latest.jsonl")
+if platform.system() != "Windows":
+    base = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    LOG_DIR = base / "staticgallerybuilder"
+else:
+    LOG_DIR = Path(os.getenv("LOCALAPPDATA", Path.home())) / "StaticGalleryBuilder" / "logs"
+
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LATEST_LOG_FILE = LOG_DIR / "latest.jsonl"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 

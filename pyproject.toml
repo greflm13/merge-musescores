@@ -1,0 +1,43 @@
+[build-system]
+    build-backend = "setuptools.build_meta"
+    requires      = ["setuptools>=61", "wheel"]
+
+[project]
+    description     = "Merge MuseScore scores to single MuseScore score either with each score starting on a new page or just appending them."
+    name            = "merge-scores"
+    readme          = "README.md"
+    requires-python = ">=3.12"
+    version         = "1.0.0"
+
+    license = "AGPL-3.0-or-later"
+
+    authors = [{name = "Flo Greistorfer"}]
+
+    dependencies = []
+
+    [project.scripts]
+    merge-scores = "merge_scores.main:main"
+
+[dependency-groups]
+    dev = ["pyinstaller", "ruff", "deptry"]
+
+[tool.setuptools.packages.find]
+    where = ["src"]
+
+[tool.setuptools.package-data]
+merge-scores = []
+
+[tool.ruff]
+    line-length    = 140
+    target-version = "py36"
+
+    [tool.ruff.lint]
+        ignore = ["E501"]
+        select = ["B", "E", "F", "I", "UP"]
+
+    [tool.ruff.format]
+        indent-style = "space"
+        quote-style  = "double"
+
+[tool.deptry.per_rule_ignores]
+DEP003 = "merge_scores"

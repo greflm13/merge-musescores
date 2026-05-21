@@ -1,30 +1,26 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Merge donor .mscz into a base .mscz by appending <Staff id="n"> contents
 """
 
 from __future__ import annotations
 
+import argparse
 import io
+import logging
 import os
 import re
-import sys
 import shutil
-import zipfile
-import logging
+import sys
 import tempfile
-import argparse
 import xml.etree.ElementTree as ET
-
+import zipfile
 from copy import deepcopy
-from typing import List, Dict, Optional, Set
+from importlib.metadata import version
 
-from modules.logger import JSONFormatter, rotate_log_file, LATEST_LOG_FILE
+from merge_scores.modules.logger import LATEST_LOG_FILE, JSONFormatter, rotate_log_file
 
-
-SCRIPTDIR = os.path.dirname(os.path.realpath(__file__)).removesuffix(__package__ if __package__ else "")
-
+__version__ = version("merge_scores")
 
 logger = logging.getLogger("defaultlogger")
 
@@ -46,7 +42,7 @@ logger.setLevel(logging.DEBUG)
 # --------------------------
 
 
-def first_mscx_name(zf: zipfile.ZipFile) -> Optional[str]:
+def first_mscx_name(zf: zipfile.ZipFile) -> str | None:
     for name in zf.namelist():
         if name.lower().endswith(".mscx") and not name.endswith("/"):
             return name
@@ -66,7 +62,7 @@ def get_score(root: ET.Element) -> ET.Element:
     return s if s is not None else root
 
 
-def extract_longname(part: ET.Element) -> Optional[str]:
+def extract_longname(part: ET.Element) -> str | None:
     """Strict longName-only. No fallback to trackName or instrumentId."""
     for ln in part.findall(".//Instrument/longName"):
         val = (ln.text or "").strip()
@@ -80,14 +76,14 @@ def extract_longname(part: ET.Element) -> Optional[str]:
 
 def index_single_staff_parts(
     root: ET.Element, file: str
-) -> tuple[Dict[str, ET.Element[str]], list[str], Dict[str, List[ET.Element[str]]], dict[str, ET.Element[str]]]:
+) -> tuple[dict[str, ET.Element[str]], list[str], dict[str, list[ET.Element[str]]], dict[str, ET.Element[str]]]:
     logger.debug("Indexing parts for file", extra={"file": file})
     score = get_score(root)
     parts = list(score.findall("Part"))
     logger.debug("Found parts", extra={"parts_count": len(parts)})
 
-    name_to_part: Dict[str, ET.Element] = {}
-    name_list: List[str] = []
+    name_to_part: dict[str, ET.Element] = {}
+    name_list: list[str] = []
 
     for p in parts:
         name = extract_longname(p)
@@ -106,7 +102,7 @@ def index_single_staff_parts(
     score_staves = [s for s in score.findall("Staff") if "id" in s.attrib]
     logger.debug("Found score staves", extra={"staves_count": len(score_staves)})
 
-    name_to_staves: Dict[str, List[ET.Element]] = {}
+    name_to_staves: dict[str, list[ET.Element]] = {}
 
     cursor = 0
 
@@ -138,7 +134,7 @@ def index_single_staff_parts(
 # --------------------------
 
 
-def get_measures(staff: ET.Element) -> List[ET.Element]:
+def get_measures(staff: ET.Element) -> list[ET.Element]:
     return [ch for ch in staff if ch.tag == "Measure"]
 
 
@@ -292,7 +288,7 @@ def insert_break(m: ET.Element, p: bool) -> None:
     ensure_end_barline(m)
 
 
-def last_measure(staff: Optional[ET.Element]) -> Optional[ET.Element]:
+def last_measure(staff: ET.Element | None) -> ET.Element | None:
     if staff is None:
         return None
     ms = get_measures(staff)
@@ -304,7 +300,7 @@ def last_measure(staff: Optional[ET.Element]) -> Optional[ET.Element]:
 # --------------------------
 
 
-def next_id(existing: Set[str]) -> str:
+def next_id(existing: set[str]) -> str:
     nums = []
     for x in existing:
         try:
@@ -335,7 +331,7 @@ def hide_empty_voices(score: ET.Element) -> None:
     logger.debug("Added hideWhenEmpty to parts", extra={"added_count": added})
 
 
-def find_order(score: ET.Element) -> Optional[ET.Element]:
+def find_order(score: ET.Element) -> ET.Element | None:
     for ch in score:
         if ch.tag.endswith("Order"):
             return ch
@@ -434,17 +430,13 @@ def compute_soloist_permutation_from_current_parts(score: ET.Element) -> list[in
     return permutation
 
 
-def _reorder_block_inplace_by_permutation(
-    score: ET.Element, tag: str, base_elems: list[ET.Element], perm: list[int]
-) -> None:
+def _reorder_block_inplace_by_permutation(score: ET.Element, tag: str, base_elems: list[ET.Element], perm: list[int]) -> None:
     """
     In-place reorder of a homogeneous block (<Staff> here) to follow a permutation that
     was computed on the *Parts*. 'base_elems' must be a snapshot of the block BEFORE any moves.
     We use remove+insert for a single node at a time to avoid duplicates.
     """
-    logger.debug(
-        "Reordering block by permutation", extra={"tag": tag, "element_count": len(base_elems), "permutation": perm}
-    )
+    logger.debug("Reordering block by permutation", extra={"tag": tag, "element_count": len(base_elems), "permutation": perm})
     children = list(score)
     tag_positions = [i for i, ch in enumerate(children) if ch.tag == tag]
 
@@ -505,7 +497,7 @@ def renumber_staff_ids_sequential(score: ET.Element) -> None:
 # --------------------------
 
 
-def remove_hvboxes(staff: Optional[ET.Element]) -> int:
+def remove_hvboxes(staff: ET.Element | None) -> int:
     if staff is None:
         return 0
     removed = 0
@@ -599,7 +591,7 @@ def relocate_hvboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> Non
 # --------------------------
 
 
-def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element]:
+def _build_placeholders_from_reference(ref_staff: ET.Element) -> list[ET.Element]:
     """
     Create per-measure placeholder clones that preserve *actual* measure length.
     Handles pickup measures by respecting <Measure len="X/Y"> if present.
@@ -611,7 +603,7 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> List[ET.Element
     ref_ms = get_measures(ref_staff)
     logger.debug("Building placeholders from reference measures", extra={"reference_measures_count": len(ref_ms)})
 
-    placeholders: List[ET.Element] = []
+    placeholders: list[ET.Element] = []
     current_ts = ""
 
     for i, m in enumerate(ref_ms):
@@ -682,9 +674,7 @@ def relocate_system_spanners_to_first_staff(score: ET.Element) -> None:
     logger.debug("Scanning staves for system spanners", extra={"staves_to_scan": len(staves) - 1})
     for staff in staves[1:]:
         measures = get_measures(staff)
-        logger.debug(
-            "Scanning staff for spanners", extra={"staff_id": staff.get("id"), "measures_count": len(measures)}
-        )
+        logger.debug("Scanning staff for spanners", extra={"staff_id": staff.get("id"), "measures_count": len(measures)})
 
         for i, m in enumerate(measures):
             if i >= len(first_measures):
@@ -747,7 +737,7 @@ def relocate_system_texts_to_first_staff(score: ET.Element) -> None:
     relocated_count = 0
 
     logger.debug("Scanning staves for system texts", extra={"staves_to_scan": len(staves) - 1})
-    for staff_idx, staff in enumerate(staves[1:], start=2):  # start=2 because we skip first staff
+    for _staff_idx, staff in enumerate(staves[1:], start=2):  # start=2 because we skip first staff
         measures = get_measures(staff)
         logger.debug("Scanning staff for texts", extra={"staff_id": staff.get("id"), "measures_count": len(measures)})
 
@@ -784,8 +774,8 @@ def create_new_voice(
     longName: str,
     donor_part: ET.Element,
     donor_staff: ET.Element,
-    used_staff_ids: Set[str],
-    primary_staff: Optional[ET.Element],
+    used_staff_ids: set[str],
+    primary_staff: ET.Element | None,
 ) -> tuple[ET.Element[str], ET.Element[str]]:
     logger.debug("Creating new voice", extra={"longName": longName})
     score = get_score(base_root)
@@ -816,9 +806,7 @@ def create_new_voice(
     if primary_staff is not None:
         logger.debug("Building placeholders from primary staff")
         placeholders = _build_placeholders_from_reference(primary_staff)
-        logger.debug(
-            "Removing existing measures and adding placeholders", extra={"placeholders_count": len(placeholders)}
-        )
+        logger.debug("Removing existing measures and adding placeholders", extra={"placeholders_count": len(placeholders)})
         for dm in list(new_staff):
             if dm.tag == "Measure":
                 new_staff.remove(dm)
@@ -917,12 +905,13 @@ def write_zip_from_dir(src_dir: str, out_zip: str) -> None:
 # --------------------------
 
 
-def main() -> int:
+def merge() -> int:
     ap = argparse.ArgumentParser(description="Merge MS4 .mscz files")
     ap.add_argument("-o", "--output-name", required=True)
     ap.add_argument("-D", "--output-dir", default=".")
     ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
     ap.add_argument("file", nargs="+")
+    ap.add_argument("-V", "--version", action="version", version="%(prog)s " + __version__)
     args = ap.parse_args()
 
     rotate_log_file()
@@ -949,10 +938,8 @@ def main() -> int:
 
     if len(donor_list) == 0 and os.path.splitext(base_zip)[1] != ".mscz":
         logger.debug("Reading donor list from file", extra={"list_file": base_zip})
-        with open(base_zip, "r", encoding="utf-8") as f:
-            donor_list = [
-                os.path.abspath(os.path.join(".", line.strip())) for line in f.readlines() if len(line.strip()) > 0
-            ]
+        with open(base_zip, encoding="utf-8") as f:
+            donor_list = [os.path.abspath(os.path.join(".", line.strip())) for line in f.readlines() if len(line.strip()) > 0]
             base_zip = donor_list[0]
             donor_list = donor_list[1:]
         logger.debug("Resolved files from list", extra={"base_file": base_zip, "donor_files": donor_list})
@@ -990,9 +977,7 @@ def main() -> int:
         logger.debug("Base XML parsed successfully")
 
         logger.debug("Indexing base score parts")
-        base_name_to_part, base_names_order, base_name_to_staves, base_staff_by_id = index_single_staff_parts(
-            base_root, base_mscx
-        )
+        base_name_to_part, base_names_order, base_name_to_staves, base_staff_by_id = index_single_staff_parts(base_root, base_mscx)
         used_staff_ids = set(base_staff_by_id.keys())
         logger.debug("Base parts indexed", extra={"base_names_order": base_names_order})
         logger.debug("Used staff IDs", extra={"used_staff_ids": list(used_staff_ids)})
@@ -1113,7 +1098,7 @@ def main() -> int:
                 if nm in donor_name_to_staves:
                     donor_staves = donor_name_to_staves[nm]
                     logger.debug("Appending content for existing voice", extra={"voice_name": nm})
-                    for bs, ds in zip(base_staves, donor_staves):
+                    for bs, ds in zip(base_staves, donor_staves, strict=False):
                         measure_count = len([ch for ch in ds if ch.tag == "Measure"])
                         logger.debug("Appending measures to staff", extra={"measure_count": measure_count})
                         for ch in list(ds):
@@ -1169,5 +1154,9 @@ def main() -> int:
     return 0
 
 
+def main():
+    sys.exit(merge())
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
