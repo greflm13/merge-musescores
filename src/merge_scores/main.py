@@ -786,7 +786,7 @@ def relocate_system_texts_to_first_staff(score: ET.Element) -> None:
     first_measures = get_measures(first_staff)
     logger.debug("Relocating system texts to first staff", extra={"source_staves_count": len(staves) - 1})
 
-    SYSTEM_TEXTS = {"Tempo"}
+    SYSTEM_TEXTS = {"Tempo", "SystemText"}
     relocated_count = 0
 
     logger.debug("Scanning staves for system texts", extra={"staves_to_scan": len(staves) - 1})
