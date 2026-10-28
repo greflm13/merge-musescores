@@ -1083,7 +1083,11 @@ def merge() -> int:
     if len(donor_list) == 0 and os.path.splitext(base_zip)[1] != ".mscz":
         logger.debug("Reading donor list from file", extra={"list_file": base_zip})
         with open(base_zip, encoding="utf-8") as f:
-            donor_list = [os.path.abspath(os.path.join(".", line.strip())) for line in f.readlines() if len(line.strip()) > 0]
+            donor_list = [
+                os.path.abspath(os.path.join(os.path.dirname(args.file[0]), line.strip()))
+                for line in f.readlines()
+                if len(line.strip()) > 0
+            ]
             base_zip = donor_list[0]
             donor_list = donor_list[1:]
         logger.debug("Resolved files from list", extra={"base_file": base_zip, "donor_files": donor_list})
@@ -1195,7 +1199,7 @@ def merge() -> int:
 
                 eid = lm.findtext("eid")
 
-                if eid in seen:
+                if eid is not None and eid in seen:
                     continue
 
                 seen.add(eid)
