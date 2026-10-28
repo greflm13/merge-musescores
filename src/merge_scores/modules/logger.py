@@ -9,9 +9,9 @@ from pathlib import Path
 
 if platform.system() != "Windows":
     base = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state"))
-    LOG_DIR = base / "staticgallerybuilder"
+    LOG_DIR = base / "mergemusescores"
 else:
-    LOG_DIR = Path(os.getenv("LOCALAPPDATA", Path.home())) / "StaticGalleryBuilder" / "logs"
+    LOG_DIR = Path(os.getenv("LOCALAPPDATA", Path.home())) / "mergemusescores" / "logs"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LATEST_LOG_FILE = LOG_DIR / "latest.jsonl"
@@ -21,11 +21,11 @@ os.makedirs(LOG_DIR, exist_ok=True)
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_entry = {
-            "asctime": self.formatTime(record),
+            "timestamp": self.formatTime(record),
             "created": record.created,
             "filename": record.filename,
             "funcName": record.funcName,
-            "levelname": record.levelname,
+            "level": record.levelname,
             "levelno": record.levelno,
             "lineno": record.lineno,
             "module": record.module,
@@ -67,7 +67,7 @@ def rotate_log_file(compress=True) -> None:
             first_line = f.readline()
             try:
                 first_log = json.loads(first_line)
-                first_timestamp = first_log.get("asctime")
+                first_timestamp = first_log.get("timestamp")
                 first_timestamp = first_timestamp.split(",")[0]
             except (json.JSONDecodeError, KeyError):
                 first_timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

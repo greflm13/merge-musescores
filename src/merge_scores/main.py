@@ -206,6 +206,8 @@ def create_page_break() -> ET.Element:
     lb = ET.Element("LayoutBreak")
     st = ET.SubElement(lb, "subtype")
     st.text = "page"
+    cm = ET.Comment("Added by merger")
+    lb.append(cm)
     return lb
 
 
@@ -213,8 +215,18 @@ def remove_page_break(m: ET.Element):
     for ch in m:
         if ch.tag != "LayoutBreak":
             continue
+        pagebreak = False
         for sub in ch:
             if sub.tag == "subtype" and (sub.text or "").strip().lower() == "page":
+                pagebreak = True
+
+        if pagebreak:
+            added_by_us = False
+            for sub in ch:
+                if sub.tag is ET.Comment:
+                    if sub.text == "Added by merger":
+                        added_by_us = True
+            if added_by_us:
                 m.remove(ch)
                 break
 
@@ -257,6 +269,8 @@ def ensure_end_barline(m: ET.Element) -> None:
     bl = ET.Element("BarLine")
     st = ET.SubElement(bl, "subtype")
     st.text = "end"
+    cm = ET.Comment("Added by merger")
+    bl.append(cm)
     voice.append(bl)
 
 
@@ -557,7 +571,8 @@ def insert_before_measure_ordinal(staves: list[ET.Element], m: int, box: ET.Elem
                     previous = first_staff[i - 2]
                     if has_page_break(previous):
                         for staff in staves:
-                            remove_page_break(staff[i - 2])
+                            for idx in [i - 2, i - 1, i]:
+                                remove_page_break(staff[idx])
                         add_page_break = True
                 first_staff.insert(i, box)
                 if add_page_break:
@@ -675,6 +690,13 @@ def _build_placeholders_from_reference(ref_staff: ET.Element, idx: int) -> list[
         layout_breaks_copied = 0
         for ch in m:
             if ch.tag == "LayoutBreak":
+                added_by_us = False
+                for chi in ch:
+                    if chi.tag is ET.Comment:
+                        if chi.text == "Added by merger":
+                            added_by_us = True
+                if added_by_us:
+                    continue
                 cp.insert(insert_index, deepcopy(ch))
                 insert_index += 1
                 layout_breaks_copied += 1
@@ -1162,6 +1184,7 @@ def merge() -> int:
                     score.append(deepcopy(donor_locks))
 
             logger.debug("Inserting breaks in base staves", extra={"donor_label": label})
+            seen = set()
             for staff in score.findall("Staff"):
                 if "id" not in staff.attrib:
                     continue
@@ -1169,6 +1192,13 @@ def merge() -> int:
                 lm = last_measure(staff)
                 if lm is None:
                     continue
+
+                eid = lm.findtext("eid")
+
+                if eid in seen:
+                    continue
+
+                seen.add(eid)
 
                 insert_break(lm, args.new_page)
                 if staff[-1].tag is not ET.Comment:
