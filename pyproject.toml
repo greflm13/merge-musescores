@@ -29,7 +29,7 @@ merge-scores = []
 
 [tool.ruff]
     line-length    = 140
-    target-version = "py37"
+    target-version = "py312"
 
     [tool.ruff.lint]
         ignore = ["E501"]

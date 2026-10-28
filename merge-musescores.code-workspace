@@ -39,7 +39,8 @@
                 "args": [
                     "-o",
                     "Merged",
-                    "filelist"
+                    "filelist",
+                    "-N"
                 ]
             }
         ]

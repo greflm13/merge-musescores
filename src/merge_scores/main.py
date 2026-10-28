@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from copy import deepcopy
 from importlib.metadata import version
+from typing import cast
 
 from merge_scores.modules.logger import LATEST_LOG_FILE, JSONFormatter, rotate_log_file
 
@@ -208,6 +209,16 @@ def create_page_break() -> ET.Element:
     return lb
 
 
+def remove_page_break(m: ET.Element):
+    for ch in m:
+        if ch.tag != "LayoutBreak":
+            continue
+        for sub in ch:
+            if sub.tag == "subtype" and (sub.text or "").strip().lower() == "page":
+                m.remove(ch)
+                break
+
+
 def has_section_break(m: ET.Element) -> bool:
     for ch in m:
         if ch.tag != "LayoutBreak":
@@ -264,20 +275,12 @@ def insert_break(m: ET.Element, p: bool) -> None:
 
     kids = list(m)
     eid_i = None
-    v_i = None
 
     for i, ch in enumerate(kids):
         if ch.tag == "eid":
             eid_i = i
-        if ch.tag == "voice" and v_i is None:
-            v_i = i
 
-    if v_i is not None:
-        idx = v_i
-        if eid_i is not None and eid_i < v_i:
-            idx = eid_i + 1
-    else:
-        idx = (eid_i + 1) if eid_i is not None else 0
+    idx = (eid_i + 1) if eid_i is not None else 0
 
     if p:
         logger.debug("Inserting page break")
@@ -286,6 +289,23 @@ def insert_break(m: ET.Element, p: bool) -> None:
     m.insert(idx, lb)
 
     ensure_end_barline(m)
+
+
+def insert_page_break(m: ET.Element):
+    if has_page_break(m):
+        return
+    pb = create_page_break()
+
+    kids = list(m)
+    eid_i = None
+
+    for i, ch in enumerate(kids):
+        if ch.tag == "eid":
+            eid_i = i
+
+    idx = (eid_i + 1) if eid_i is not None else 0
+
+    m.insert(idx, pb)
 
 
 def last_measure(staff: ET.Element | None) -> ET.Element | None:
@@ -497,12 +517,12 @@ def renumber_staff_ids_sequential(score: ET.Element) -> None:
 # --------------------------
 
 
-def remove_hvboxes(staff: ET.Element | None) -> int:
+def remove_hvtboxes(staff: ET.Element | None) -> int:
     if staff is None:
         return 0
     removed = 0
     for ch in list(staff):
-        if ch.tag == "VBox" or ch.tag == "HBox":
+        if ch.tag == "VBox" or ch.tag == "HBox" or ch.tag == "TBox":
             staff.remove(ch)
             removed += 1
     return removed
@@ -518,22 +538,36 @@ def measure_index_of_node(staff: ET.Element, node: ET.Element) -> int:
     return count
 
 
-def insert_before_measure_ordinal(first_staff: ET.Element, m: int, vb: ET.Element) -> None:
+def insert_before_measure_ordinal(staves: list[ET.Element], m: int, box: ET.Element, move_page_break: bool = False) -> None:
+    first_staff = staves[0]
     if m <= 0:
         for i, ch in enumerate(list(first_staff)):
             if ch.tag == "Measure":
-                first_staff.insert(i, vb)
+                first_staff.insert(i, box)
                 return
-        first_staff.append(vb)
+        first_staff.append(box)
         return
     seen = 0
     for i, ch in enumerate(list(first_staff)):
         if ch.tag == "Measure":
             if seen == m:
-                first_staff.insert(i, vb)
+                add_page_break = False
+                comment = first_staff[i - 1]
+                if move_page_break:
+                    previous = first_staff[i - 2]
+                    if has_page_break(previous):
+                        for staff in staves:
+                            remove_page_break(staff[i - 2])
+                        add_page_break = True
+                first_staff.insert(i, box)
+                if add_page_break:
+                    insert_page_break(first_staff[i])
+                if move_page_break:
+                    first_staff.remove(comment)
+                    first_staff.insert(i + 1, comment)
                 return
             seen += 1
-    first_staff.append(vb)
+    first_staff.append(box)
 
 
 def relocate_hvtboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> None:
@@ -548,38 +582,43 @@ def relocate_hvtboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> No
     if not staves:
         logger.debug("No staves found for HVTBox relocation")
         return
-    first_staff = staves[0]
 
     vboxes = []
     hboxes = []
     tboxes = []
     for staff in staves:
-        for ch in list(staff):
+        for i, ch in enumerate(list(staff)):
+            end_of_score = False
+            try:
+                if staff[i + 1].tag is ET.Comment:
+                    end_of_score = True
+            except IndexError:
+                ...
             if ch.tag == "VBox":
-                vboxes.append((measure_index_of_node(staff, ch), ch, staff))
+                vboxes.append((measure_index_of_node(staff, ch), ch, staff, end_of_score))
             elif ch.tag == "HBox":
-                hboxes.append((measure_index_of_node(staff, ch), ch, staff))
+                hboxes.append((measure_index_of_node(staff, ch), ch, staff, end_of_score))
             elif ch.tag == "TBox":
-                tboxes.append((measure_index_of_node(staff, ch), ch, staff))
+                tboxes.append((measure_index_of_node(staff, ch), ch, staff, end_of_score))
 
     logger.debug("Found boxes to relocate", extra={"vboxes_count": len(vboxes), "hboxes_count": len(hboxes), "tboxes_count": len(tboxes)})
 
     if not vboxes and not hboxes and not tboxes:
         return
 
-    for _, vb, src_staff in vboxes:
+    for _, vb, src_staff, _ in vboxes:
         try:
             src_staff.remove(vb)
         except Exception:
             pass
 
-    for _, hb, src_staff in hboxes:
+    for _, hb, src_staff, _ in hboxes:
         try:
             src_staff.remove(hb)
         except Exception:
             pass
 
-    for _, tb, src_staff in tboxes:
+    for _, tb, src_staff, _ in tboxes:
         try:
             src_staff.remove(tb)
         except Exception:
@@ -588,15 +627,15 @@ def relocate_hvtboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> No
     vboxes_sorted = sorted(enumerate(vboxes), key=lambda t: (t[1][0], t[0]))
     hboxes_sorted = sorted(enumerate(hboxes), key=lambda t: (t[1][0], t[0]))
     tboxes_sorted = sorted(enumerate(tboxes), key=lambda t: (t[1][0], t[0]))
-    for _, (m_idx, tb, _) in tboxes_sorted:
+    for _, (m_idx, tb, _, mpb) in tboxes_sorted:
         logger.debug("Inserting TBox at measure ordinal", extra={"measure_ordinal": m_idx})
-        insert_before_measure_ordinal(first_staff, m_idx, tb)
-    for _, (m_idx, vb, _) in vboxes_sorted:
+        insert_before_measure_ordinal(staves, m_idx, tb, mpb)
+    for _, (m_idx, vb, _, mpb) in vboxes_sorted:
         logger.debug("Inserting VBox at measure ordinal", extra={"measure_ordinal": m_idx})
-        insert_before_measure_ordinal(first_staff, m_idx, vb)
-    for _, (m_idx, hb, _) in hboxes_sorted:
+        insert_before_measure_ordinal(staves, m_idx, vb, mpb)
+    for _, (m_idx, hb, _, mpb) in hboxes_sorted:
         logger.debug("Inserting HBox at measure ordinal", extra={"measure_ordinal": m_idx})
-        insert_before_measure_ordinal(first_staff, m_idx, hb)
+        insert_before_measure_ordinal(staves, m_idx, hb, mpb)
 
 
 # --------------------------
@@ -604,7 +643,7 @@ def relocate_hvtboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> No
 # --------------------------
 
 
-def _build_placeholders_from_reference(ref_staff: ET.Element) -> list[ET.Element]:
+def _build_placeholders_from_reference(ref_staff: ET.Element, idx: int) -> list[ET.Element]:
     """
     Create per-measure placeholder clones that preserve *actual* measure length.
     Handles pickup measures by respecting <Measure len="X/Y"> if present.
@@ -662,6 +701,7 @@ def _build_placeholders_from_reference(ref_staff: ET.Element) -> list[ET.Element
 
         placeholders.append(cp)
 
+    placeholders.append(cast(ET.Element, ET.Comment(f"Score {idx} end")))
     logger.debug("Built placeholders", extra={"placeholders_count": len(placeholders)})
     return placeholders
 
@@ -784,6 +824,7 @@ def relocate_system_texts_to_first_staff(score: ET.Element) -> None:
 def create_new_voice(
     base_root: ET.Element,
     donor_root: ET.Element,
+    sidx: int,
     longName: str,
     donor_part: ET.Element,
     donor_staff: ET.Element,
@@ -818,7 +859,7 @@ def create_new_voice(
 
     if primary_staff is not None:
         logger.debug("Building placeholders from primary staff")
-        placeholders = _build_placeholders_from_reference(primary_staff)
+        placeholders = _build_placeholders_from_reference(primary_staff, sidx)
         logger.debug("Removing existing measures and adding placeholders", extra={"placeholders_count": len(placeholders)})
         for dm in list(new_staff):
             if dm.tag == "Measure":
@@ -826,7 +867,7 @@ def create_new_voice(
         for ph in placeholders:
             new_staff.append(ph)
 
-    remove_hvboxes(new_staff)
+    remove_hvtboxes(new_staff)
 
     base_order = find_order(score)
     donor_order = find_order(get_score(donor_root))
@@ -1003,7 +1044,7 @@ def merge() -> int:
         primary_staff = base_staff_by_id.get("1")
 
         logger.debug("Beginning donor processing", extra={"donor_count": len(donor_list)})
-        for donor_path in donor_list:
+        for idx, donor_path in enumerate(donor_list):
             label = os.path.basename(donor_path)
             logger.info("Processing donor", extra={"donor_label": label})
             logger.debug("Donor path", extra={"donor_path": donor_path})
@@ -1062,6 +1103,8 @@ def merge() -> int:
                     continue
 
                 insert_break(lm, args.new_page)
+                if staff[-1].tag is not ET.Comment:
+                    staff.append(ET.Comment(f"Score {idx + 1} end"))
 
             donor_first_name = donor_names_order[0] if donor_names_order else None
             donor_first_staff = donor_name_to_staves.get(donor_first_name, [])[0] if donor_first_name else None
@@ -1077,6 +1120,7 @@ def merge() -> int:
                 new_part, new_staff = create_new_voice(
                     base_root,
                     donor_root,
+                    idx + 1,
                     nm,
                     dp,
                     ds,
@@ -1096,7 +1140,7 @@ def merge() -> int:
             donor_ref_staff = donor_first_staff
             donor_placeholders = []
             if donor_ref_staff is not None:
-                donor_placeholders = _build_placeholders_from_reference(donor_ref_staff)
+                donor_placeholders = _build_placeholders_from_reference(donor_ref_staff, idx + 2)
                 logger.debug(
                     "Built placeholders from donor reference staff",
                     extra={"placeholders_count": len(donor_placeholders)},
