@@ -513,7 +513,7 @@ def renumber_staff_ids_sequential(score: ET.Element) -> None:
 
 
 # --------------------------
-# VBox handling
+# Box handling
 # --------------------------
 
 
@@ -955,6 +955,72 @@ def write_zip_from_dir(src_dir: str, out_zip: str) -> None:
 
 
 # --------------------------
+# Table of contents
+# --------------------------
+
+
+def get_song_titles(score: ET.Element) -> list[str]:
+    titles = []
+    staves = [s for s in score if s.tag == "Staff" and "id" in s.attrib]
+    for ch in list(staves[0]):
+        if ch.tag == "VBox":
+            tx = ch.find("Text")
+            if tx is None:
+                continue
+            st = tx.find("style")
+            if st is None:
+                continue
+            if st.text == "title":
+                ti = tx.find("text")
+                if ti is None:
+                    continue
+                titles.append(ti.text)
+    return titles
+
+
+WIDTHS = {
+    ".": 1,
+    " ": 1,
+    ",": 1,
+    ":": 1,
+    ";": 1,
+    "'": 1,
+}
+
+
+def visual_width(s):
+    return sum(WIDTHS.get(c, 2) for c in s)
+
+
+def toc_line(title: str, page: int, target_width: int = 152) -> str:
+    p = str(page)
+
+    remaining = target_width - visual_width(title) - visual_width(p)
+    dots = "." * max(1, remaining)
+
+    return f"{title}{dots}{p}"
+
+
+def create_toc(titles: list[str], toc_name: str) -> ET.Element:
+    tb = ET.Element("TBox")
+    lb = ET.SubElement(tb, "LayoutBreak")
+    st = ET.SubElement(lb, "subtype")
+    st.text = "page"
+    tx = ET.SubElement(tb, "Text")
+    sy = ET.SubElement(tx, "style")
+    sy.text = "frame"
+    tt = ET.SubElement(tx, "text")
+    al = ET.SubElement(tx, "align")
+    al.text = "justify,top"
+    pt = [toc_line(title, page + 1) for page, title in enumerate(titles)]
+    fr = ET.fromstring(f'<root><font size="20"/>{toc_name}<br/><br/><font size="12"/>{"<br/>".join(pt)}<br/></root>')
+    tt.text = fr.text
+    for ch in fr:
+        tt.append(ch)
+    return tb
+
+
+# --------------------------
 # Main
 # --------------------------
 
@@ -964,6 +1030,8 @@ def merge() -> int:
     ap.add_argument("-o", "--output-name", required=True)
     ap.add_argument("-D", "--output-dir", default=".")
     ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
+    ap.add_argument("-T", "--table-of-contents", action="store_true", help="add table of contents on first page", dest="toc")
+    ap.add_argument("--toc-name", help="ToC Title, (default 'Table of Contents')", default="Table of Contents")
     ap.add_argument("file", nargs="+")
     ap.add_argument("-V", "--version", action="version", version="%(prog)s " + __version__)
     args = ap.parse_args()
@@ -1182,6 +1250,20 @@ def merge() -> int:
         relocate_system_texts_to_first_staff(score)
         logger.debug("Hiding empty voices")
         hide_empty_voices(score)
+        if args.toc:
+            logger.debug("Generating ToC")
+            titles = get_song_titles(score)
+
+            toc = create_toc(titles, args.toc_name)
+            po = score.find("page-offset")
+            if po is None:
+                po = ET.Element("page-offset")
+                score.insert(1, po)
+            po.text = "-1"
+
+            staves = [s for s in score if s.tag == "Staff" and "id" in s.attrib]
+            first_staff = staves[0]
+            first_staff.insert(0, toc)
 
         logger.debug("Writing modified XML back to file")
         buf = io.BytesIO()

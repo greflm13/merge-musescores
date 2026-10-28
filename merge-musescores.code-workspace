@@ -40,7 +40,10 @@
                     "-o",
                     "Merged",
                     "filelist",
-                    "-N"
+                    "-N",
+                    "-T",
+                    "--toc-name",
+                    "Inhaltsverzeichnis"
                 ]
             }
         ]
