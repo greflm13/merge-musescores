@@ -536,32 +536,35 @@ def insert_before_measure_ordinal(first_staff: ET.Element, m: int, vb: ET.Elemen
     first_staff.append(vb)
 
 
-def relocate_hvboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> None:
+def relocate_hvtboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> None:
     """
-    Collect all H/VBoxes from all score-level staves and reinsert them into the
+    Collect all H/V/TBoxes from all score-level staves and reinsert them into the
     final first staff (current score order), preserving *measure ordinal*:
-      - If a H/VBox had k measures before it on its original staff, insert it
+      - If a H/V/TBox had k measures before it on its original staff, insert it
         after the k-th measure of the first staff (k=0 => before first measure).
       - If k >= number of measures in the first staff, append at the end.
     """
     staves = [el for el in score if el.tag == "Staff" and "id" in el.attrib]
     if not staves:
-        logger.debug("No staves found for HVBox relocation")
+        logger.debug("No staves found for HVTBox relocation")
         return
     first_staff = staves[0]
 
     vboxes = []
     hboxes = []
+    tboxes = []
     for staff in staves:
         for ch in list(staff):
             if ch.tag == "VBox":
                 vboxes.append((measure_index_of_node(staff, ch), ch, staff))
             elif ch.tag == "HBox":
                 hboxes.append((measure_index_of_node(staff, ch), ch, staff))
+            elif ch.tag == "TBox":
+                tboxes.append((measure_index_of_node(staff, ch), ch, staff))
 
-    logger.debug("Found boxes to relocate", extra={"vboxes_count": len(vboxes), "hboxes_count": len(hboxes)})
+    logger.debug("Found boxes to relocate", extra={"vboxes_count": len(vboxes), "hboxes_count": len(hboxes), "tboxes_count": len(tboxes)})
 
-    if not vboxes and not hboxes:
+    if not vboxes and not hboxes and not tboxes:
         return
 
     for _, vb, src_staff in vboxes:
@@ -576,8 +579,18 @@ def relocate_hvboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> Non
         except Exception:
             pass
 
+    for _, tb, src_staff in tboxes:
+        try:
+            src_staff.remove(tb)
+        except Exception:
+            pass
+
     vboxes_sorted = sorted(enumerate(vboxes), key=lambda t: (t[1][0], t[0]))
     hboxes_sorted = sorted(enumerate(hboxes), key=lambda t: (t[1][0], t[0]))
+    tboxes_sorted = sorted(enumerate(tboxes), key=lambda t: (t[1][0], t[0]))
+    for _, (m_idx, tb, _) in tboxes_sorted:
+        logger.debug("Inserting TBox at measure ordinal", extra={"measure_ordinal": m_idx})
+        insert_before_measure_ordinal(first_staff, m_idx, tb)
     for _, (m_idx, vb, _) in vboxes_sorted:
         logger.debug("Inserting VBox at measure ordinal", extra={"measure_ordinal": m_idx})
         insert_before_measure_ordinal(first_staff, m_idx, vb)
@@ -1117,8 +1130,8 @@ def merge() -> int:
         renumber_staff_ids_sequential(score)
         logger.debug("Reordering parts in place")
         reorder_parts_inplace(score)
-        logger.debug("Relocating H/V boxes to first staff")
-        relocate_hvboxes_to_first_staff_by_measure_ordinal(score)
+        logger.debug("Relocating H/V/T boxes to first staff")
+        relocate_hvtboxes_to_first_staff_by_measure_ordinal(score)
         logger.debug("Relocating system spanners to first staff")
         relocate_system_spanners_to_first_staff(score)
         logger.debug("Relocating system texts to first staff")

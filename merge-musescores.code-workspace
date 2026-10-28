@@ -34,7 +34,7 @@
                 "name": "Debug merge-scores",
                 "type": "debugpy",
                 "request": "launch",
-                "program": "${workspaceFolder}/src/merge_scores/main.py",
+                "module": "merge_scores.main",
                 "console": "integratedTerminal",
                 "args": [
                     "-o",
