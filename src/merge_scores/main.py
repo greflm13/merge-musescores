@@ -1043,6 +1043,30 @@ def create_toc(titles: list[str], toc_name: str) -> ET.Element:
 
 
 # --------------------------
+# Title page
+# --------------------------
+
+
+def create_title_page() -> ET.Element:
+    vb = ET.Element("VBox")
+    he = ET.SubElement(vb, "height")
+    he.text = "10"
+    lb = ET.SubElement(vb, "LayoutBreak")
+    st = ET.SubElement(lb, "subtype")
+    st.text = "page"
+    im = ET.SubElement(vb, "Image")
+    of = ET.SubElement(im, "offset")
+    of.attrib["x"] = "-10"
+    of.attrib["y"] = "-10"
+    pa = ET.SubElement(im, "path")
+    pa.text = "aa0dce4d79d5997238e066d3a463e797.svg"
+    si = ET.SubElement(im, "size")
+    si.attrib["w"] = "140.04"
+    si.attrib["h"] = "197.95333"
+    return vb
+
+
+# --------------------------
 # Main
 # --------------------------
 
@@ -1054,8 +1078,13 @@ def merge() -> int:
     ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
     ap.add_argument("-T", "--table-of-contents", action="store_true", help="add table of contents on first page", dest="toc")
     ap.add_argument("--toc-name", help="ToC Title, (default 'Table of Contents')", default="Table of Contents")
+    ap.add_argument("-P", "--title-page", action="store_true", help="add title page", dest="tp")
     ap.add_argument("file", nargs="+")
     ap.add_argument("-V", "--version", action="version", version="%(prog)s " + __version__)
+    known_args, _ = ap.parse_known_args()
+    if known_args.tp:
+        ap.add_argument("--title-page-file", help="title page file (svg)", type=str, dest="tpf", required=True)
+
     args = ap.parse_args()
 
     rotate_log_file()
@@ -1290,14 +1319,36 @@ def merge() -> int:
 
             toc = create_toc(titles, args.toc_name)
             po = score.find("page-offset")
+            text = 0
             if po is None:
                 po = ET.Element("page-offset")
                 score.insert(1, po)
-            po.text = "-1"
+            else:
+                if po.text is not None:
+                    text = int(po.text)
+            po.text = str(text - 1)
 
             staves = [s for s in score if s.tag == "Staff" and "id" in s.attrib]
             first_staff = staves[0]
             first_staff.insert(0, toc)
+        if args.tp:
+            logger.debug("Generating Title Page")
+            tp = create_title_page()
+            po = score.find("page-offset")
+            text = 0
+            if po is None:
+                po = ET.Element("page-offset")
+                score.insert(1, po)
+            else:
+                if po.text is not None:
+                    text = int(po.text)
+            po.text = str(text - 1)
+
+            staves = [s for s in score if s.tag == "Staff" and "id" in s.attrib]
+            first_staff = staves[0]
+            first_staff.insert(0, tp)
+            ensure_dir(os.path.join(base_dir, "Pictures"))
+            shutil.copy(args.tpf, os.path.join(base_dir, "Pictures", "aa0dce4d79d5997238e066d3a463e797.svg"))
 
         logger.debug("Writing modified XML back to file")
         buf = io.BytesIO()
