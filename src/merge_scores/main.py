@@ -16,6 +16,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from copy import deepcopy
+from datetime import datetime
 from importlib.metadata import version
 from typing import cast
 
@@ -128,6 +129,14 @@ def index_single_staff_parts(
     logger.debug("Final indexed parts", extra={"final_names": final_names})
 
     return name_to_part, final_names, name_to_staves, staff_by_id
+
+
+def adjust_metadata(score: ET.Element, attribs: dict[str, str]):
+    meta_tags = score.findall("metaTag")
+    for tag in meta_tags:
+        for key, value in tag.attrib.items():
+            if key == "name" and value in attribs:
+                tag.text = attribs[value]
 
 
 # --------------------------
@@ -1314,7 +1323,7 @@ def merge() -> int:
         logger.debug("Hiding empty voices")
         hide_empty_voices(score)
         if args.toc:
-            logger.debug("Generating ToC")
+            logger.debug("Generating Table of Contents")
             titles = get_song_titles(score)
 
             toc = create_toc(titles, args.toc_name)
@@ -1349,6 +1358,17 @@ def merge() -> int:
             first_staff.insert(0, tp)
             ensure_dir(os.path.join(base_dir, "Pictures"))
             shutil.copy(args.tpf, os.path.join(base_dir, "Pictures", "aa0dce4d79d5997238e066d3a463e797.svg"))
+        logger.debug("Adjusting metadata")
+        adjust_metadata(
+            score,
+            {
+                "workTitle": args.output_name,
+                "creationDate": datetime.now().strftime("%Y-%m-%d"),
+                "composer": "",
+                "subtitle": "",
+                "copyright": "Created with MergeMuseScores https://github.com/greflm13/merge-musescores",
+            },
+        )
 
         logger.debug("Writing modified XML back to file")
         buf = io.BytesIO()
