@@ -51,6 +51,50 @@ def first_mscx_name(zf: zipfile.ZipFile) -> str | None:
     return None
 
 
+def get_style(base_dir: str) -> ET.Element:
+    raw = open(os.path.join(base_dir, "score_style.mss"), "rb").read()
+    tree = ET.parse(io.BytesIO(raw))
+    root = tree.getroot()
+    if root.tag == "Style":
+        return root
+    s = root.find("Style")
+    return s if s is not None else root
+
+
+def get_page_size(style: ET.Element) -> tuple[float, float]:
+    width_wrong = style.find("pageWidth")
+    assert width_wrong is not None and width_wrong.text is not None
+
+    height_wrong = style.find("pageHeight")
+    assert height_wrong is not None and height_wrong.text is not None
+
+    width = float(width_wrong.text) * 25.4
+    height = float(height_wrong.text) * 25.4
+    return width, height
+
+
+def get_page_margins(style: ET.Element) -> tuple[float, float, float]:
+    left_wrong = style.find("pageOddLeftMargin")
+    assert left_wrong is not None and left_wrong.text is not None
+
+    top_wrong = style.find("pageOddTopMargin")
+    assert top_wrong is not None and top_wrong.text is not None
+
+    bottom_wrong = style.find("pageOddBottomMargin")
+    assert bottom_wrong is not None and bottom_wrong.text is not None
+
+    left = float(left_wrong.text) * 25.4
+    top = float(top_wrong.text) * 25.4
+    bottom = float(bottom_wrong.text) * 25.4
+    return left, top, bottom
+
+
+def get_spatium(style: ET.Element) -> float:
+    spatium = style.find("spatium")
+    assert spatium is not None and spatium.text is not None
+    return float(spatium.text)
+
+
 # --------------------------
 # MS4 helpers
 # --------------------------
@@ -95,7 +139,7 @@ def index_single_staff_parts(
             continue
 
         if name in name_to_part:
-            logger.warning("Duplicate longName skipped", extra={"name": name, "file": file})
+            logger.warning("Duplicate longName skipped", extra={"part_name": name, "file": file})
             continue
 
         name_to_part[name] = p
@@ -1056,7 +1100,10 @@ def create_toc(titles: list[str], toc_name: str) -> ET.Element:
 # --------------------------
 
 
-def create_title_page() -> ET.Element:
+def create_title_page(style: ET.Element) -> ET.Element:
+    pagesize = get_page_size(style)
+    spatium = get_spatium(style)
+    margins = get_page_margins(style)
     vb = ET.Element("VBox")
     he = ET.SubElement(vb, "height")
     he.text = "10"
@@ -1065,13 +1112,13 @@ def create_title_page() -> ET.Element:
     st.text = "page"
     im = ET.SubElement(vb, "Image")
     of = ET.SubElement(im, "offset")
-    of.attrib["x"] = "-10"
-    of.attrib["y"] = "-10"
+    of.attrib["x"] = str(margins[0] / spatium * -1)
+    of.attrib["y"] = str(margins[1] / spatium * -1)
     pa = ET.SubElement(im, "path")
     pa.text = "aa0dce4d79d5997238e066d3a463e797.svg"
     si = ET.SubElement(im, "size")
-    si.attrib["w"] = "140.04"
-    si.attrib["h"] = "197.95333"
+    si.attrib["w"] = str(pagesize[0] / spatium)
+    si.attrib["h"] = str(pagesize[1] / spatium)
     return vb
 
 
@@ -1082,12 +1129,13 @@ def create_title_page() -> ET.Element:
 
 def merge() -> int:
     ap = argparse.ArgumentParser(description="Merge MS4 .mscz files")
-    ap.add_argument("-o", "--output-name", required=True)
-    ap.add_argument("-D", "--output-dir", default=".")
+    ap.add_argument("-o", "--output-name", required=True, help="name of the resulting score")
+    ap.add_argument("-D", "--output-dir", type=str, default=".", help="path to output directory (default: '.')")
     ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
     ap.add_argument("-T", "--table-of-contents", action="store_true", help="add table of contents on first page", dest="toc")
-    ap.add_argument("--toc-name", help="ToC Title, (default 'Table of Contents')", default="Table of Contents")
+    ap.add_argument("--toc-name", help="ToC Title, (default: 'Table of Contents')", default="Table of Contents")
     ap.add_argument("-P", "--title-page", action="store_true", help="add title page", dest="tp")
+    ap.add_argument("-S", "--style", type=str, help="MuseScore style to apply to result (default: style of the first score)")
     ap.add_argument("file", nargs="+")
     ap.add_argument("-V", "--version", action="version", version="%(prog)s " + __version__)
     known_args, _ = ap.parse_known_args()
@@ -1322,6 +1370,10 @@ def merge() -> int:
         relocate_system_texts_to_first_staff(score)
         logger.debug("Hiding empty voices")
         hide_empty_voices(score)
+        if args.style:
+            logger.debug("Applying style")
+            os.remove(os.path.join(base_dir, "score_style.mss"))
+            shutil.copy(args.style, os.path.join(base_dir, "score_style.mss"))
         if args.toc:
             logger.debug("Generating Table of Contents")
             titles = get_song_titles(score)
@@ -1341,8 +1393,9 @@ def merge() -> int:
             first_staff = staves[0]
             first_staff.insert(0, toc)
         if args.tp:
+            style = get_style(base_dir)
             logger.debug("Generating Title Page")
-            tp = create_title_page()
+            tp = create_title_page(style)
             po = score.find("page-offset")
             text = 0
             if po is None:

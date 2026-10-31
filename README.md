@@ -18,6 +18,7 @@ Merge multiple MuseScore 4 (`.mscz`) scores into a single conductor-style score 
 - Optional page break between merged scores
 - Optional automatically generated Table of Contents
 - Optional title page
+- Optional score style applied
 - Handles malformed MSCX files using lenient XML parsing
 - Reorders soloists to the top of the score
 - Renumbers staff IDs to maintain MuseScore consistency
@@ -39,26 +40,30 @@ pip install .
 ## Usage
 
 ```txt
-usage: merge-scores [-h] -o OUTPUT_NAME [-D OUTPUT_DIR] [-N] [-T] [--toc-name TOC_NAME] [-P] [-V] file [file ...]
+usage: merge-scores [-h] -o OUTPUT_NAME [-D OUTPUT_DIR] [-N] [-T] [--toc-name TOC_NAME] [-P] [-S STYLE] [-V] file [file ...]
 
 Merge MS4 .mscz files
 
 positional arguments:
-file
+  file
 
 options:
--h, --help            show this help message and exit
--o OUTPUT_NAME, --output-name OUTPUT_NAME
--D OUTPUT_DIR, --output-dir OUTPUT_DIR
--N, --new-page        start each merged score on a new page
--T, --table-of-contents
-                      add table of contents on first page
---toc-name TOC_NAME   ToC Title, (default 'Table of Contents')
--P, --title-page      add title page
--V, --version         show program's version number and exit
+  -h, --help            show this help message and exit
+  -o OUTPUT_NAME, --output-name OUTPUT_NAME
+                        name of the resulting score
+  -D OUTPUT_DIR, --output-dir OUTPUT_DIR
+                        path to output directory (default: '.')
+  -N, --new-page        start each merged score on a new page
+  -T, --table-of-contents
+                        add table of contents on first page
+  --toc-name TOC_NAME   ToC Title, (default: 'Table of Contents')
+  -P, --title-page      add title page
+  -S STYLE, --style STYLE
+                        MuseScore style to apply to result (default: style of the first score)
+  -V, --version         show program's version number and exit
 ```
 
-## Input File Lists
+## Input File List
 
 Instead of specifying every score on the command line, you may provide a text file:
 
