@@ -108,6 +108,7 @@ jobs:
     needs: version
     if: needs.version.outputs.changed == 'true'
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-latest
@@ -172,8 +173,8 @@ jobs:
         run: |
           choco install inkscape imagemagick -y
 
-          inkscape assets/icon.svg --export-filename=assets/icon_1024.png --export-width=1024
-          magick assets/icon_1024.png -define icon:auto-resize=256,128,64,48,32,16 assets/icon.ico
+          inkscape "assets/icon.svg" --export-filename="assets/icon_1024.png" --export-width=1024
+          magick "assets/icon_1024.png" -define icon:auto-resize=256,128,64,48,32,16 "assets/icon.ico"
 
       - name: Create virtual environment
         run: |
@@ -271,7 +272,6 @@ jobs:
   release:
     needs:
       - version
-      - build
     runs-on: ubuntu-latest
     if: needs.version.outputs.changed == 'true'
     steps:
