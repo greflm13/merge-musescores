@@ -22,6 +22,12 @@ from typing import cast
 
 from merge_scores.modules.logger import LATEST_LOG_FILE, JSONFormatter, rotate_log_file
 
+try:
+    from modules._version import APP_VERSION  # pyright: ignore[reportMissingImports]
+except Exception:
+    APP_VERSION = None
+
+SCRIPTDIR = os.path.dirname(os.path.realpath(__file__)).removesuffix(__package__ if __package__ else "")
 __version__ = version("merge_scores")
 
 logger = logging.getLogger("defaultlogger")
@@ -42,6 +48,22 @@ logger.setLevel(logging.DEBUG)
 # --------------------------
 # Utility
 # --------------------------
+
+
+def get_version() -> str:
+    if APP_VERSION:
+        return APP_VERSION
+
+    try:
+        import tomllib
+
+        pyproject = os.path.join(SCRIPTDIR, "pyproject.toml")
+        with open(pyproject, "rb") as f:
+            return tomllib.load(f)["project"]["version"]
+    except Exception:
+        return "dev"
+
+    return "dev"
 
 
 def first_mscx_name(zf: zipfile.ZipFile) -> str | None:
@@ -1453,7 +1475,7 @@ def arg_parse() -> argparse.Namespace:
     ap.add_argument("-P", "--title-page", action="store_true", help="add title page", dest="tp")
     ap.add_argument("-S", "--style", type=str, help="MuseScore style to apply to result (default: style of the first score)")
     ap.add_argument("file", nargs="+")
-    ap.add_argument("-V", "--version", action="version", version="%(prog)s " + __version__)
+    ap.add_argument("-V", "--version", action="version", version="%(prog)s " + get_version())
     known_args, _ = ap.parse_known_args()
     if known_args.tp:
         ap.add_argument("--title-page-file", help="title page file (svg)", type=str, dest="tpf", required=True)

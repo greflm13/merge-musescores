@@ -222,3 +222,4 @@ __marimo__/
 .mscbackup
 
 logs
+src/merge_scores/deployment

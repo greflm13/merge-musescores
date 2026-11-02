@@ -8,9 +8,14 @@ clean:
 
 rebuild: clean build
 
-gui:
+buildgui:
 	mkdir -p dist
 	pyside6-deploy -c pysidedeploy.linux.spec
+
+cleangui:
+	rm -rf dist src/merge_scores/deployment
+
+rebuildgui: cleangui buildgui
 
 install:
 	pip install .

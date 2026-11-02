@@ -109,13 +109,26 @@ jobs:
     if: needs.version.outputs.changed == 'true'
     strategy:
       matrix:
-        runner:
-          - ubuntu-latest
-          - ubuntu-24.04-arm
-          - windows-latest
-          - windows-11-arm
-          - macos-15-intel
-          - macos-latest
+        include:
+          - runner: ubuntu-latest
+            os: linux
+            arch: x64
+
+          - runner: ubuntu-latest
+            os: linux
+            arch: arm64
+
+          - runner: windows-latest
+            os: windows
+            arch: x64
+
+          - runner: macos-latest
+            os: macos
+            arch: x64
+
+          - runner: macos-latest
+            os: macos
+            arch: arm64
 
     runs-on: ${{ matrix.runner }}
 
@@ -130,21 +143,118 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install . --group dev
-
-      - name: Build package
+      - name: Generate macOS icon (.icns)
+        if: runner.os == 'macOS'
         shell: bash
         run: |
-          pyinstaller build.spec
+          brew install inkscape
 
-      - name: Upload asset to GitHub Release
+          inkscape assets/icon.svg --export-filename=assets/icon_1024.png --export-width=1024
+
+          mkdir -p icon.iconset
+
+          sips -z 16 16     assets/icon_1024.png --out icon.iconset/icon_16x16.png
+          sips -z 32 32     assets/icon_1024.png --out icon.iconset/icon_16x16@2x.png
+          sips -z 32 32     assets/icon_1024.png --out icon.iconset/icon_32x32.png
+          sips -z 64 64     assets/icon_1024.png --out icon.iconset/icon_32x32@2x.png
+          sips -z 128 128   assets/icon_1024.png --out icon.iconset/icon_128x128.png
+          sips -z 256 256   assets/icon_1024.png --out icon.iconset/icon_128x128@2x.png
+          sips -z 256 256   assets/icon_1024.png --out icon.iconset/icon_256x256.png
+          sips -z 512 512   assets/icon_1024.png --out icon.iconset/icon_256x256@2x.png
+          sips -z 512 512   assets/icon_1024.png --out icon.iconset/icon_512x512.png
+          sips -z 1024 1024 assets/icon_1024.png --out icon.iconset/icon_512x512@2x.png
+
+          iconutil -c icns icon.iconset -o assets/icon.icns
+
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+          mkdir dist
+
+      - name: Generate version module
+        shell: bash
+        run: |+
+          VERSION="${{ needs.version.outputs.version }}"
+          echo "APP_VERSION = \"$VERSION\"" > modules/_version.py
+
+      - name: Install dependencies (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          source venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install pyside6
+
+      - name: Build desktop app (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          source venv/bin/activate
+          pyside6-deploy -c pysidedeploy.linux.spec --force
+
+          cd dist
+          FILE=$(ls | head -n 1)
+
+          EXT="${FILE##*.}"
+          mv "$FILE" "MergeMuseScores-linux-${{ matrix.arch }}.${EXT}"
+
+      - name: Build desktop app (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          source venv/bin/activate
+          pyside6-deploy -c pysidedeploy.macos.spec --force
+          pushd dist > /dev/null
+          APP_BUNDLE=$(find . -maxdepth 2 -name "*.app" -type d | head -n 1)
+          if [[ -z "$APP_BUNDLE" ]]; then
+            echo "No .app bundle found in dist/"
+            find . -maxdepth 3 -print
+            exit 1
+          fi
+          APP_BUNDLE=$(basename "$APP_BUNDLE")
+          ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "MergeMuseScores-macos-${{ matrix.arch }}.zip"
+          popd > /dev/null
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          venv\Scripts\Activate.ps1
+          python -m pip install --upgrade pip
+          pip install pyside6
+
+      - name: Build desktop app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          venv\Scripts\Activate.ps1
+          pyside6-deploy -c pysidedeploy.windows.spec --force
+
+          Set-Location dist
+          $file = Get-ChildItem | Select-Object -First 1
+          $ext = $file.Extension
+          Rename-Item $file "MergeMuseScores-windows-${{ matrix.arch }}$ext"
+
+      - name: Upload macOS asset to GitHub Release
+        if: runner.os == 'macOS'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.version.outputs.tag }}
-          files: dist/${{ needs.version.outputs.name }}*
+          files: dist/*.zip
+
+      - name: Upload Linux asset to GitHub Release
+        if: runner.os == 'Linux'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          files: dist/**
+
+      - name: Upload Windows asset to GitHub Release
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          files: dist/**
           draft: true
 
   release:

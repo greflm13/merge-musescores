@@ -19,7 +19,8 @@
             "**/pyproject.toml": "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/pyproject.json"
         },
         "files.associations": {
-            "build.spec": "python"
+            "build.spec": "python",
+            "pysidedeploy.*.spec": "qt-pysidedeployspec"
         }
     },
     "extensions": {

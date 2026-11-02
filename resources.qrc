@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>assets/icon.svg</file>
+    </qresource>
+    <qresource prefix="/translations">
+        <file>i18n/i18n_en.qm</file>
+        <file>i18n/i18n_de.qm</file>
+    </qresource>
+</RCC>
