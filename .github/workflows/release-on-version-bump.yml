@@ -175,7 +175,7 @@ jobs:
         shell: bash
         run: |+
           VERSION="${{ needs.version.outputs.version }}"
-          echo "APP_VERSION = \"$VERSION\"" > modules/_version.py
+          echo "APP_VERSION = \"$VERSION\"" > src/merge_scores/modules/_version.py
 
       - name: Install dependencies (Unix)
         if: runner.os != 'Windows'
