@@ -181,7 +181,7 @@ jobs:
           Test-Path assets/icon.svg
           Get-Item assets/icon.svg
               
-          inkscape assets/icon.svg --export-filename=assets/icon_1024.png --export-width=1024
+          inkscape assets/icon.svg --export-type=png --export-filename=assets/icon_1024.png --export-width=1024
               
           Write-Host "Inkscape exit code: $LASTEXITCODE"
               
