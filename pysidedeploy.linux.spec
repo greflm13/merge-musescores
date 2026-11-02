@@ -7,7 +7,7 @@ title = MergeMuseScores
 project_dir = .
 
 # source file entry point path. default = main.py
-input_file = src/merge_scores/main.py
+input_file = src/merge_scores/ui.py
 
 # directory where the executable output is generated
 exec_directory = dist
@@ -24,7 +24,7 @@ icon = assets/icon.svg
 python_path = /home/user/.pyenv/versions/3.12.12/envs/merge-scores/bin/python
 
 # python packages to install
-packages = 
+packages = Nuitka[onefile]
 
 # buildozer = for deploying Android application
 android_packages = buildozer==1.5.0,cython==0.29.33
@@ -40,7 +40,7 @@ qml_files =
 excluded_qml_plugins = 
 
 # qt modules used. comma separated
-modules = 
+modules = Core,DBus,Gui,Widgets
 
 # qt plugins used by the application. only relevant for desktop deployment
 # for qt plugins used in android application see [android][plugins]

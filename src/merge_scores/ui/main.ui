@@ -1,28 +1,201 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MainWindow</class>
- <widget class="QMainWindow" name="MainWindow">
+ <class>MergeWindow</class>
+ <widget class="QMainWindow" name="MergeWindow">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>900</width>
+    <height>800</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>MergeMuseScores</string>
   </property>
-  <widget class="QWidget" name="centralwidget"/>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>800</width>
-     <height>23</height>
-    </rect>
-   </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QLabel" name="labelFiles">
+      <property name="text">
+       <string>MuseScore Files</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QListWidget" name="fileList">
+      <property name="dragDropMode">
+       <enum>QAbstractItemView::DragDropMode::InternalMove</enum>
+      </property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayoutFiles">
+      <item>
+       <widget class="QPushButton" name="btnAddFiles">
+        <property name="text">
+         <string>Add Files</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnRemoveFiles">
+        <property name="text">
+         <string>Remove Selected</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnClearFiles">
+        <property name="text">
+         <string>Clear</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="groupOptions">
+      <property name="title">
+       <string>Merge Options</string>
+      </property>
+      <layout class="QFormLayout" name="formLayout">
+       <item row="0" column="0">
+        <widget class="QLabel" name="labelOutputName">
+         <property name="text">
+          <string>Output Name</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="txtOutputName"/>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="labelOutputDir">
+         <property name="text">
+          <string>Output Directory</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <layout class="QHBoxLayout" name="layoutOutputDir">
+         <item>
+          <widget class="QLineEdit" name="txtOutputDir"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnBrowseOutputDir">
+           <property name="text">
+            <string>Browse...</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="labelStyle">
+         <property name="text">
+          <string>Style File</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <layout class="QHBoxLayout" name="layoutStyle">
+         <item>
+          <widget class="QLineEdit" name="txtStyle"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnBrowseStyle">
+           <property name="text">
+            <string>Browse...</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="3" column="1">
+        <widget class="QCheckBox" name="chkNewPage">
+         <property name="text">
+          <string>Insert Page Break Between Scores</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QCheckBox" name="chkToc">
+         <property name="text">
+          <string>Generate Table of Contents</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLabel" name="labelTocName">
+         <property name="text">
+          <string>TOC Title</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="1">
+        <widget class="QLineEdit" name="txtTocName">
+         <property name="text">
+          <string>Table of Contents</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <widget class="QCheckBox" name="chkTitlePage">
+         <property name="text">
+          <string>Generate Title Page</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="QLabel" name="labelTitleSvg">
+         <property name="text">
+          <string>Title Page SVG</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <layout class="QHBoxLayout" name="layoutTitleSvg">
+         <item>
+          <widget class="QLineEdit" name="txtTitleSvg"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnBrowseTitleSvg">
+           <property name="text">
+            <string>Browse...</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="btnMerge">
+      <property name="text">
+       <string>Merge Scores</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="labelLog">
+      <property name="text">
+       <string>Log Output</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPlainTextEdit" name="txtLog">
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+   </layout>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>

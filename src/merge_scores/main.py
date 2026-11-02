@@ -1127,40 +1127,34 @@ def create_title_page(style: ET.Element) -> ET.Element:
 # --------------------------
 
 
-def merge() -> int:
-    ap = argparse.ArgumentParser(description="Merge MS4 .mscz files")
-    ap.add_argument("-o", "--output-name", required=True, help="name of the resulting score")
-    ap.add_argument("-D", "--output-dir", type=str, default=".", help="path to output directory (default: '.')")
-    ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
-    ap.add_argument("-T", "--table-of-contents", action="store_true", help="add table of contents on first page", dest="toc")
-    ap.add_argument("--toc-name", help="ToC Title, (default: 'Table of Contents')", default="Table of Contents")
-    ap.add_argument("-P", "--title-page", action="store_true", help="add title page", dest="tp")
-    ap.add_argument("-S", "--style", type=str, help="MuseScore style to apply to result (default: style of the first score)")
-    ap.add_argument("file", nargs="+")
-    ap.add_argument("-V", "--version", action="version", version="%(prog)s " + __version__)
-    known_args, _ = ap.parse_known_args()
-    if known_args.tp:
-        ap.add_argument("--title-page-file", help="title page file (svg)", type=str, dest="tpf", required=True)
-
-    args = ap.parse_args()
-
+def merge(
+    files: list[str],
+    out_name: str,
+    out_dir: str,
+    new_page: bool = False,
+    toc: bool = False,
+    toc_name: str = "Table of Contents",
+    title_page: bool = False,
+    title_page_file: str = "",
+    style: str | None = None,
+) -> int:
     rotate_log_file()
 
     logger.info("Starting merge process")
     logger.debug(
         "Parsed command line arguments",
         extra={
-            "output_name": args.output_name,
-            "output_dir": args.output_dir,
-            "new_page": args.new_page,
-            "files": args.file,
+            "output_name": out_name,
+            "output_dir": out_dir,
+            "new_page": new_page,
+            "files": files,
         },
     )
 
-    base_zip = os.path.abspath(args.file[0])
-    donor_list = [os.path.abspath(x) for x in args.file[1:]]
-    out_dir = os.path.abspath(args.output_dir)
-    out_path = os.path.join(out_dir, f"{args.output_name}.mscz")
+    base_zip = os.path.abspath(files[0])
+    donor_list = [os.path.abspath(x) for x in files[1:]]
+    out_dir = os.path.abspath(out_dir)
+    out_path = os.path.join(out_dir, f"{out_name}.mscz")
 
     logger.debug("Base file", extra={"base_file": base_zip})
     logger.debug("Donor files", extra={"donor_files": donor_list})
@@ -1170,9 +1164,7 @@ def merge() -> int:
         logger.debug("Reading donor list from file", extra={"list_file": base_zip})
         with open(base_zip, encoding="utf-8") as f:
             donor_list = [
-                os.path.abspath(os.path.join(os.path.dirname(args.file[0]), line.strip()))
-                for line in f.readlines()
-                if len(line.strip()) > 0
+                os.path.abspath(os.path.join(os.path.dirname(files[0]), line.strip())) for line in f.readlines() if len(line.strip()) > 0
             ]
             base_zip = donor_list[0]
             donor_list = donor_list[1:]
@@ -1290,7 +1282,7 @@ def merge() -> int:
 
                 seen.add(eid)
 
-                insert_break(lm, args.new_page)
+                insert_break(lm, new_page)
                 if staff[-1].tag is not ET.Comment:
                     staff.append(ET.Comment(f"Score {idx + 1} end"))
 
@@ -1370,15 +1362,15 @@ def merge() -> int:
         relocate_system_texts_to_first_staff(score)
         logger.debug("Hiding empty voices")
         hide_empty_voices(score)
-        if args.style:
+        if style:
             logger.debug("Applying style")
             os.remove(os.path.join(base_dir, "score_style.mss"))
-            shutil.copy(args.style, os.path.join(base_dir, "score_style.mss"))
-        if args.toc:
+            shutil.copy(style, os.path.join(base_dir, "score_style.mss"))
+        if toc:
             logger.debug("Generating Table of Contents")
             titles = get_song_titles(score)
 
-            toc = create_toc(titles, args.toc_name)
+            table_of_contents = create_toc(titles, toc_name)
             po = score.find("page-offset")
             text = 0
             if po is None:
@@ -1391,11 +1383,11 @@ def merge() -> int:
 
             staves = [s for s in score if s.tag == "Staff" and "id" in s.attrib]
             first_staff = staves[0]
-            first_staff.insert(0, toc)
-        if args.tp:
-            style = get_style(base_dir)
+            first_staff.insert(0, table_of_contents)
+        if title_page:
+            page_style = get_style(base_dir)
             logger.debug("Generating Title Page")
-            tp = create_title_page(style)
+            tp = create_title_page(page_style)
             po = score.find("page-offset")
             text = 0
             if po is None:
@@ -1410,12 +1402,12 @@ def merge() -> int:
             first_staff = staves[0]
             first_staff.insert(0, tp)
             ensure_dir(os.path.join(base_dir, "Pictures"))
-            shutil.copy(args.tpf, os.path.join(base_dir, "Pictures", "aa0dce4d79d5997238e066d3a463e797.svg"))
+            shutil.copy(title_page_file, os.path.join(base_dir, "Pictures", "aa0dce4d79d5997238e066d3a463e797.svg"))
         logger.debug("Adjusting metadata")
         adjust_metadata(
             score,
             {
-                "workTitle": args.output_name,
+                "workTitle": out_name,
                 "creationDate": datetime.now().strftime("%Y-%m-%d"),
                 "composer": "",
                 "subtitle": "",
@@ -1434,7 +1426,7 @@ def merge() -> int:
         open(base_mscx, "wb").write(buf.getvalue())
 
         logger.debug("Moving MSCX to base directory")
-        shutil.move(base_mscx, os.path.join(base_dir, f"{args.output_name}.mscx"))
+        shutil.move(base_mscx, os.path.join(base_dir, f"{out_name}.mscx"))
         logger.debug("Creating output zip archive")
         ensure_dir(out_dir)
         write_zip_from_dir(base_dir, out_path)
@@ -1451,8 +1443,28 @@ def merge() -> int:
     return 0
 
 
+def arg_parse() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Merge MS4 .mscz files")
+    ap.add_argument("-o", "--output-name", required=True, help="name of the resulting score")
+    ap.add_argument("-D", "--output-dir", type=str, default=".", help="path to output directory (default: '.')")
+    ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
+    ap.add_argument("-T", "--table-of-contents", action="store_true", help="add table of contents on first page", dest="toc")
+    ap.add_argument("--toc-name", help="ToC Title, (default: 'Table of Contents')", default="Table of Contents")
+    ap.add_argument("-P", "--title-page", action="store_true", help="add title page", dest="tp")
+    ap.add_argument("-S", "--style", type=str, help="MuseScore style to apply to result (default: style of the first score)")
+    ap.add_argument("file", nargs="+")
+    ap.add_argument("-V", "--version", action="version", version="%(prog)s " + __version__)
+    known_args, _ = ap.parse_known_args()
+    if known_args.tp:
+        ap.add_argument("--title-page-file", help="title page file (svg)", type=str, dest="tpf", required=True)
+    else:
+        ap.add_argument("--title-page-file", help="title page file (svg)", type=str, dest="tpf", default="")
+    return ap.parse_args()
+
+
 def main():
-    sys.exit(merge())
+    args = arg_parse()
+    sys.exit(merge(args.file, args.output_name, args.output_dir, args.new_page, args.toc, args.toc_name, args.tp, args.tpf, args.style))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,10 @@ clean:
 
 rebuild: clean build
 
+gui:
+	mkdir -p dist
+	pyside6-deploy -c pysidedeploy.linux.spec
+
 install:
 	pip install .
 	ln -s $(HOME)/.local/state/mergemusescores logs
