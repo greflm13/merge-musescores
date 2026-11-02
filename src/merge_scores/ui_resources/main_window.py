@@ -1,4 +1,3 @@
-
 ################################################################################
 ## Form generated from reading UI file 'main_window.ui'
 ##
@@ -89,9 +88,7 @@ class Ui_MergeWindow:
 
         self.verticalLayout_2.addWidget(self.btnAddFiles)
 
-
         self.gridLayout.addWidget(self.verticalGroupBox, 0, 4, 1, 1)
-
 
         self.verticalLayout.addLayout(self.gridLayout)
 
@@ -126,7 +123,6 @@ class Ui_MergeWindow:
 
         self.layoutOutputDir.addWidget(self.btnBrowseOutputDir)
 
-
         self.formLayout.setLayout(1, QFormLayout.ItemRole.FieldRole, self.layoutOutputDir)
 
         self.labelStyle = QLabel(self.groupOptions)
@@ -145,7 +141,6 @@ class Ui_MergeWindow:
         self.btnBrowseStyle.setObjectName("btnBrowseStyle")
 
         self.layoutStyle.addWidget(self.btnBrowseStyle)
-
 
         self.formLayout.setLayout(2, QFormLayout.ItemRole.FieldRole, self.layoutStyle)
 
@@ -191,9 +186,7 @@ class Ui_MergeWindow:
 
         self.layoutTitleSvg.addWidget(self.btnBrowseTitleSvg)
 
-
         self.formLayout.setLayout(7, QFormLayout.ItemRole.FieldRole, self.layoutTitleSvg)
-
 
         self.verticalLayout.addWidget(self.groupOptions)
 
@@ -223,6 +216,7 @@ class Ui_MergeWindow:
         self.retranslateUi(MergeWindow)
 
         QMetaObject.connectSlotsByName(MergeWindow)
+
     # setupUi
 
     def retranslateUi(self, MergeWindow):
@@ -250,5 +244,5 @@ class Ui_MergeWindow:
         self.btnMerge.setText(QCoreApplication.translate("MergeWindow", "Merge Scores", None))
         self.labelLog.setText(QCoreApplication.translate("MergeWindow", "Log Output", None))
         self.toolBar.setWindowTitle(QCoreApplication.translate("MergeWindow", "toolBar", None))
-    # retranslateUi
 
+    # retranslateUi

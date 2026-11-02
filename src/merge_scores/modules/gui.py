@@ -88,6 +88,11 @@ class MergeWindow(QMainWindow):
         self.ui = Ui_MergeWindow()
         self.ui.setupUi(self)
 
+        docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
+        scores = docs / "MuseScore4" / "Scores"
+
+        start_dir = str(scores if scores.exists() else docs)
+
         self.ui.fileList.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.ui.fileList.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.ui.fileList.setDragEnabled(True)
@@ -100,8 +105,9 @@ class MergeWindow(QMainWindow):
         self.ui.btnDown.clicked.connect(self.down_files)
         self.ui.btnBrowseStyle.clicked.connect(self.browse_style)
         self.ui.btnBrowseTitleSvg.clicked.connect(self.browse_title)
+        self.ui.btnBrowseOutputDir.clicked.connect(self.browse_output_dir)
         self.ui.btnMerge.clicked.connect(self.run_merge)
-        self.ui.txtOutputDir.setText(os.getcwd())
+        self.ui.txtOutputDir.setText(start_dir)
         self.ui.actionInfo.triggered.connect(self._show_info_dialog)
 
         handler = QtLogHandler()
@@ -204,6 +210,24 @@ class MergeWindow(QMainWindow):
             return
 
         self.ui.txtTitleSvg.setText(title_svg)
+
+    def browse_output_dir(self):
+        docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
+        scores = docs / "MuseScore4" / "Scores"
+
+        start_dir = str(scores if scores.exists() else docs)
+
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("Select Output Directory"),
+            start_dir,
+            QFileDialog.Option.ShowDirsOnly,
+        )
+
+        if not directory:
+            return
+
+        self.ui.txtOutputDir.setText(directory)
 
     def validate(self):
         invalid = 0
