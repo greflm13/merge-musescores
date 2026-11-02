@@ -171,9 +171,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install inkscape imagemagick -y
+          choco install inkscape -y
 
-          inkscape "assets/icon.svg" --export-filename="assets/icon_1024.png" --export-width=1024
+          Get-Command inkscape
+          inkscape --version
+
+          inkscape.exe "assets/icon.svg" --export-filename="assets/icon_1024.png" --export-width=1024
           magick "assets/icon_1024.png" -define icon:auto-resize=256,128,64,48,32,16 "assets/icon.ico"
 
       - name: Create virtual environment
