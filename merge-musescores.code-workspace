@@ -46,6 +46,14 @@
                     "--toc-name",
                     "Inhaltsverzeichnis"
                 ]
+            },
+            {
+                "name": "Debug merge-scores gui",
+                "type": "debugpy",
+                "request": "launch",
+                "module": "merge_scores.ui",
+                "console": "integratedTerminal",
+                "args": []
             }
         ]
     }

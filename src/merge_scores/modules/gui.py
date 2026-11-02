@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from merge_scores.main import get_version, merge
-from merge_scores.ui.main_window import Ui_MergeWindow
+from merge_scores.ui_resources.main_window import Ui_MergeWindow
 
 APP_ICON = QIcon(":/assets/icon.svg")
 
@@ -49,18 +49,22 @@ class MergeWorker(QObject):
         self.style = style
 
     def run(self):
-        merge(
-            self.files,
-            self.out_name,
-            self.out_dir,
-            self.new_page,
-            self.toc,
-            self.toc_name,
-            self.title_page,
-            self.title_page_file,
-            self.style,
-        )
-        self.finished.emit()
+        try:
+            merge(
+                self.files,
+                self.out_name,
+                self.out_dir,
+                self.new_page,
+                self.toc,
+                self.toc_name,
+                self.title_page,
+                self.title_page_file,
+                self.style,
+            )
+        except Exception as e:
+            logging.error(e)
+        finally:
+            self.finished.emit()
 
 
 class LogEmitter(QObject):
@@ -204,26 +208,26 @@ class MergeWindow(QMainWindow):
         invalid = 0
         if not self.ui.txtOutputName.text().strip():
             self.ui.txtOutputName.setStyleSheet("border: 1px solid red;")
-            invalid += invalid
+            invalid += 1
         else:
             self.ui.txtOutputName.setStyleSheet("")
 
         if not self.ui.txtOutputDir.text().strip():
             self.ui.txtOutputDir.setStyleSheet("border: 1px solid red;")
-            invalid += invalid
+            invalid += 1
         else:
             self.ui.txtOutputDir.setStyleSheet("")
 
         if not self.ui.fileList.count() > 0:
             self.ui.fileList.setStyleSheet("border: 1px solid red;")
-            invalid += invalid
+            invalid += 1
         else:
             self.ui.fileList.setStyleSheet("")
 
         if self.ui.chkTitlePage.isChecked():
             if not self.ui.txtTitleSvg.text().strip():
                 self.ui.txtTitleSvg.setStyleSheet("border: 1px solid red;")
-                invalid += invalid
+                invalid += 1
             else:
                 self.ui.txtTitleSvg.setStyleSheet("")
 
@@ -231,9 +235,6 @@ class MergeWindow(QMainWindow):
             return False
         else:
             return True
-
-    def disable_merge(self):
-        self.ui.btnMerge.setEnabled(False)
 
     def enable_merge(self):
         self.ui.btnMerge.setEnabled(True)
@@ -243,6 +244,8 @@ class MergeWindow(QMainWindow):
             QMessageBox.warning(self, "Missing Information", "Please fill in all required fields.")
             return
         files = [self.ui.fileList.item(i).text() for i in range(self.ui.fileList.count())]
+
+        self.ui.btnMerge.setEnabled(False)
 
         self.merge_thread = QThread()
 
@@ -261,7 +264,6 @@ class MergeWindow(QMainWindow):
         self.merge_worker.moveToThread(self.merge_thread)
 
         self.merge_thread.started.connect(self.merge_worker.run)
-        self.merge_thread.started.connect(self.disable_merge)
         self.merge_worker.finished.connect(self.enable_merge)
         self.merge_worker.finished.connect(self.merge_thread.quit)
         self.merge_worker.finished.connect(self.merge_worker.deleteLater)

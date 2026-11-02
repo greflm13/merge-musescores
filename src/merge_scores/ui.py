@@ -4,7 +4,7 @@ import sys
 from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
 from PySide6.QtWidgets import QApplication
 
-import merge_scores.ui.resources_rc  # noqa: F401
+import merge_scores.ui_resources.resources_rc  # noqa: F401
 from merge_scores.main import get_version
 from merge_scores.modules.gui import APP_ICON, MergeWindow
 
