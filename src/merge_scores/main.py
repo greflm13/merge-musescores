@@ -6,6 +6,7 @@ Merge donor .mscz into a base .mscz by appending <Staff id="n"> contents
 from __future__ import annotations
 
 import argparse
+from Crypto.Hash import MD4
 import io
 import logging
 import os
@@ -17,6 +18,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from copy import deepcopy
 from datetime import datetime
+from pathlib import Path
 from importlib.metadata import version
 from typing import cast
 
@@ -25,10 +27,10 @@ from merge_scores.modules.logger import LATEST_LOG_FILE, JSONFormatter, rotate_l
 try:
     from modules._version import APP_VERSION  # pyright: ignore[reportMissingImports]
 except Exception:
-    APP_VERSION = None
-
-SCRIPTDIR = os.path.dirname(os.path.realpath(__file__)).removesuffix(__package__ if __package__ else "")
-__version__ = version("merge_scores")
+    try:
+        APP_VERSION = version("merge_scores")
+    except Exception:
+        APP_VERSION = None
 
 logger = logging.getLogger("defaultlogger")
 
@@ -51,19 +53,19 @@ logger.setLevel(logging.DEBUG)
 
 
 def get_version() -> str:
-    if APP_VERSION:
+    if isinstance(APP_VERSION, str):
         return APP_VERSION
-
-    try:
-        import tomllib
-
-        pyproject = os.path.join(SCRIPTDIR, "pyproject.toml")
-        with open(pyproject, "rb") as f:
-            return tomllib.load(f)["project"]["version"]
-    except Exception:
+    else:
         return "dev"
 
-    return "dev"
+
+def get_image_name(image_path: Path) -> str:
+    image_data = image_path.read_bytes()
+    digest = MD4.new(data=image_data).hexdigest()
+
+    extension = image_path.suffix.lstrip(".").lower()
+
+    return f"{digest}.{extension}"
 
 
 def first_mscx_name(zf: zipfile.ZipFile) -> str | None:
@@ -1122,7 +1124,7 @@ def create_toc(titles: list[str], toc_name: str) -> ET.Element:
 # --------------------------
 
 
-def create_title_page(style: ET.Element) -> ET.Element:
+def create_title_page(style: ET.Element, picture: str) -> ET.Element:
     pagesize = get_page_size(style)
     spatium = get_spatium(style)
     margins = get_page_margins(style)
@@ -1137,7 +1139,7 @@ def create_title_page(style: ET.Element) -> ET.Element:
     of.attrib["x"] = str(margins[0] / spatium * -1)
     of.attrib["y"] = str(margins[1] / spatium * -1)
     pa = ET.SubElement(im, "path")
-    pa.text = "aa0dce4d79d5997238e066d3a463e797.svg"
+    pa.text = picture
     si = ET.SubElement(im, "size")
     si.attrib["w"] = str(pagesize[0] / spatium)
     si.attrib["h"] = str(pagesize[1] / spatium)
@@ -1156,8 +1158,7 @@ def merge(
     new_page: bool = False,
     toc: bool = False,
     toc_name: str = "Table of Contents",
-    title_page: bool = False,
-    title_page_file: str = "",
+    title_page: str | None = None,
     style: str | None = None,
 ) -> int:
     rotate_log_file()
@@ -1409,7 +1410,8 @@ def merge(
         if title_page:
             page_style = get_style(base_dir)
             logger.debug("Generating Title Page")
-            tp = create_title_page(page_style)
+            filename = get_image_name(Path(title_page))
+            tp = create_title_page(page_style, filename)
             po = score.find("page-offset")
             text = 0
             if po is None:
@@ -1424,7 +1426,7 @@ def merge(
             first_staff = staves[0]
             first_staff.insert(0, tp)
             ensure_dir(os.path.join(base_dir, "Pictures"))
-            shutil.copy(title_page_file, os.path.join(base_dir, "Pictures", "aa0dce4d79d5997238e066d3a463e797.svg"))
+            shutil.copy(title_page, os.path.join(base_dir, "Pictures", filename))
         logger.debug("Adjusting metadata")
         adjust_metadata(
             score,
@@ -1472,21 +1474,16 @@ def arg_parse() -> argparse.Namespace:
     ap.add_argument("-N", "--new-page", action="store_true", help="start each merged score on a new page")
     ap.add_argument("-T", "--table-of-contents", action="store_true", help="add table of contents on first page", dest="toc")
     ap.add_argument("--toc-name", help="ToC Title, (default: 'Table of Contents')", default="Table of Contents")
-    ap.add_argument("-P", "--title-page", action="store_true", help="add title page", dest="tp")
+    ap.add_argument("-P", "--title-page", type=str, help="title page file (svg)", dest="tp")
     ap.add_argument("-S", "--style", type=str, help="MuseScore style to apply to result (default: style of the first score)")
     ap.add_argument("file", nargs="+")
     ap.add_argument("-V", "--version", action="version", version="%(prog)s " + get_version())
-    known_args, _ = ap.parse_known_args()
-    if known_args.tp:
-        ap.add_argument("--title-page-file", help="title page file (svg)", type=str, dest="tpf", required=True)
-    else:
-        ap.add_argument("--title-page-file", help="title page file (svg)", type=str, dest="tpf", default="")
     return ap.parse_args()
 
 
 def main():
     args = arg_parse()
-    sys.exit(merge(args.file, args.output_name, args.output_dir, args.new_page, args.toc, args.toc_name, args.tp, args.tpf, args.style))
+    sys.exit(merge(args.file, args.output_name, args.output_dir, args.new_page, args.toc, args.toc_name, args.tp, args.style))
 
 
 if __name__ == "__main__":

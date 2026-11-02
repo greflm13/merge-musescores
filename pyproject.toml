@@ -7,13 +7,13 @@
     name            = "merge-scores"
     readme          = "README.md"
     requires-python = ">=3.12"
-    version         = "1.1.13"
+    version         = "1.2.0"
 
     license = "AGPL-3.0-or-later"
 
     authors = [{name = "Flo Greistorfer"}]
 
-    dependencies = ["pyside6_addons~=6.11.0", "pyside6_essentials~=6.11.0", "pyside6~=6.11.0"]
+    dependencies = ["pyside6_addons~=6.11.0", "pyside6_essentials~=6.11.0", "pyside6~=6.11.0", "pycryptodome~=4.2.0"]
 
     [project.scripts]
     merge-scores = "merge_scores.main:main"
@@ -41,7 +41,7 @@ merge-scores = []
 
 [tool.pyside6-project]
     exclude = ["dist", "output"]
-    files   = ["assets", "i18n", "src/merge_scores/ui.py", "src/merge_scores/modules", "src/merge_scores/ui"]
+    files   = ["assets", "i18n", "src/merge_scores/ui.py", "src/merge_scores/modules", "src/merge_scores/ui", "style/musescore_dark.qss"]
 
 [tool.deptry.per_rule_ignores]
 DEP003 = "merge_scores"

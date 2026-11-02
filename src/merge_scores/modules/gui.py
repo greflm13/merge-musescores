@@ -1,5 +1,7 @@
+import configparser
 import logging
 import os
+import platform
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -18,9 +20,45 @@ from PySide6.QtWidgets import (
 )
 
 from merge_scores.main import get_version, merge
-from merge_scores.ui_resources.main_window import Ui_MergeWindow
+from merge_scores.ui_resources.main_window import Ui_MainWindow
 
 APP_ICON = QIcon(":/assets/icon.svg")
+
+if platform.system() != "Windows":
+    base = Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    DATA_DIR = base / "mergemusescores"
+else:
+    DATA_DIR = Path(os.getenv("LOCALAPPDATA", Path.home())) / "mergemusescores" / "data"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DATA_FILE = DATA_DIR / "paths.ini"
+
+config = configparser.ConfigParser()
+
+if DATA_FILE.exists():
+    config.read(DATA_FILE, encoding="utf-8")
+
+
+def get_last_location(key: str, fallback: Path) -> str:
+    """Return the last selected location or the default directory."""
+    saved_path = config.get("Locations", key, fallback=str(fallback))
+
+    if Path(saved_path).is_dir():
+        return saved_path
+
+    return str(fallback)
+
+
+def save_last_location(key: str, path: Path) -> None:
+    """Save the last selected location."""
+    if not config.has_section("Locations"):
+        config.add_section("Locations")
+
+    config.set("Locations", key, str(path))
+
+    with DATA_FILE.open("w", encoding="utf-8") as file:
+        config.write(file)
 
 
 class MergeWorker(QObject):
@@ -35,7 +73,6 @@ class MergeWorker(QObject):
         toc,
         toc_name,
         title_page,
-        title_page_file,
         style,
     ):
         super().__init__()
@@ -46,7 +83,6 @@ class MergeWorker(QObject):
         self.toc = toc
         self.toc_name = toc_name
         self.title_page = title_page
-        self.title_page_file = title_page_file
         self.style = style
 
     def run(self):
@@ -59,7 +95,6 @@ class MergeWorker(QObject):
                 self.toc,
                 self.toc_name,
                 self.title_page,
-                self.title_page_file,
                 self.style,
             )
         except Exception as e:
@@ -85,13 +120,14 @@ class MergeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.ui = Ui_MergeWindow()
+        self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
         docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
         scores = docs / "MuseScore4" / "Scores"
 
-        start_dir = str(scores if scores.exists() else docs)
+        default_dir = scores if scores.exists() else docs
+        start_dir = get_last_location("output", default_dir)
 
         self.ui.fileList.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.ui.fileList.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -133,7 +169,8 @@ class MergeWindow(QMainWindow):
         docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
         scores = docs / "MuseScore4" / "Scores"
 
-        start_dir = str(scores if scores.exists() else docs)
+        default_dir = scores if scores.exists() else docs
+        start_dir = get_last_location("files", default_dir)
         files, _ = QFileDialog.getOpenFileNames(
             self,
             self.tr("Select MuseScore Files"),
@@ -146,6 +183,7 @@ class MergeWindow(QMainWindow):
 
         for file in files:
             self.ui.fileList.addItem(file)
+        save_last_location("files", Path(files[0]).parent)
 
     def clear_files(self):
         self.ui.fileList.clear()
@@ -184,7 +222,9 @@ class MergeWindow(QMainWindow):
         docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
         styles = docs / "MuseScore4" / "Styles"
 
-        start_dir = str(styles if styles.exists() else docs)
+        default_dir = styles if styles.exists() else docs
+        start_dir = get_last_location("style", default_dir)
+
         style, _ = QFileDialog.getOpenFileName(
             self,
             self.tr("Select Style File"),
@@ -196,9 +236,12 @@ class MergeWindow(QMainWindow):
             return
 
         self.ui.txtStyle.setText(style)
+        save_last_location("style", Path(style).parent)
 
     def browse_title(self):
-        start_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+        docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
+
+        start_dir = get_last_location("title", docs)
         title_svg, _ = QFileDialog.getOpenFileName(
             self,
             self.tr("Select Title Page"),
@@ -210,12 +253,14 @@ class MergeWindow(QMainWindow):
             return
 
         self.ui.txtTitleSvg.setText(title_svg)
+        save_last_location("title", Path(title_svg).parent)
 
     def browse_output_dir(self):
         docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
         scores = docs / "MuseScore4" / "Scores"
 
-        start_dir = str(scores if scores.exists() else docs)
+        default_dir = scores if scores.exists() else docs
+        start_dir = get_last_location("output", default_dir)
 
         directory = QFileDialog.getExistingDirectory(
             self,
@@ -228,6 +273,7 @@ class MergeWindow(QMainWindow):
             return
 
         self.ui.txtOutputDir.setText(directory)
+        save_last_location("output", Path(directory))
 
     def validate(self):
         invalid = 0
@@ -248,13 +294,6 @@ class MergeWindow(QMainWindow):
             invalid += 1
         else:
             self.ui.fileList.setStyleSheet("")
-
-        if self.ui.chkTitlePage.isChecked():
-            if not self.ui.txtTitleSvg.text().strip():
-                self.ui.txtTitleSvg.setStyleSheet("border: 1px solid red;")
-                invalid += 1
-            else:
-                self.ui.txtTitleSvg.setStyleSheet("")
 
         if invalid > 0:
             return False
@@ -281,7 +320,6 @@ class MergeWindow(QMainWindow):
             self.ui.chkNewPage.isChecked(),
             self.ui.chkToc.isChecked(),
             self.ui.txtTocName.text(),
-            self.ui.chkTitlePage.isChecked(),
             self.ui.txtTitleSvg.text(),
             self.ui.txtStyle.text(),
         )

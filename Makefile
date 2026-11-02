@@ -19,11 +19,11 @@ rebuildgui: cleangui buildgui
 
 install:
 	pip install .
-	ln -s $(HOME)/.local/state/mergemusescores logs
+	ln -sfn $(HOME)/.local/state/mergemusescores logs
 
 dev:
 	pip install -e . --group dev
-	ln -s $(HOME)/.local/state/mergemusescores logs
+	ln -sfn $(HOME)/.local/state/mergemusescores logs
 
 lint:
 	ruff check .
