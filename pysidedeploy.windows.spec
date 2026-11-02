@@ -1,13 +1,13 @@
 [app]
 
 # title of your application
-title = GrocyCodePrintpage
+title = MergeMuseScores
 
 # project root directory. default = The parent directory of input_file
 project_dir = .
 
 # source file entry point path. default = main.py
-input_file = main.py
+input_file = src/merge_scores/ui.py
 
 # directory where the executable output is generated
 exec_directory = dist
@@ -21,10 +21,10 @@ icon = assets/icon.ico
 [python]
 
 # python path
-python_path = /home/user/.pyenv/versions/3.11.15/envs/grocycode-printpage/bin/python
+python_path = /home/user/.pyenv/versions/3.12.12/envs/merge-scores/bin/python
 
 # python packages to install
-packages = Nuitka==2.7.11,ppf_datamatrix==0.2,reportlab==4.4.10
+packages = Nuitka[onefile]
 
 # buildozer = for deploying Android application
 android_packages = buildozer==1.5.0,cython==0.29.33
@@ -40,7 +40,7 @@ qml_files =
 excluded_qml_plugins = 
 
 # qt modules used. comma separated
-modules = Core,DBus,Gui,Network,Widgets
+modules = Core,DBus,Gui,Widgets
 
 # qt plugins used by the application. only relevant for desktop deployment
 # for qt plugins used in android application see [android][plugins]
