@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+from PySide6.QtCore import QFile, QIODevice, QLibraryInfo, QLocale, QTranslator
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -40,15 +40,26 @@ def setup_palette(app: QApplication) -> None:
 
 
 def setup_theme(app: QApplication) -> None:
+    # 1. Try loading from embedded Qt resources
+    resource_path = ":/style/musescore_dark.qss"
+    resource_file = QFile(resource_path)
 
+    if resource_file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        stylesheet = resource_file.readAll().toStdString()
+        resource_file.close()
+
+        app.setStyleSheet(stylesheet)
+        return
+
+    # 2. Fallback to filesystem (development mode)
     project_root = Path(__file__).resolve().parent.parent.parent
+    stylesheet_path = project_root / "style" / "musescore_dark.qss"
 
-    stylesheet = project_root / "style" / "musescore_dark.qss"
+    if stylesheet_path.is_file():
+        app.setStyleSheet(stylesheet_path.read_text(encoding="utf-8"))
+        return
 
-    if stylesheet.is_file():
-        app.setStyleSheet(stylesheet.read_text(encoding="utf-8"))
-    else:
-        print(f"Theme stylesheet not found: {stylesheet}")
+    print(f"Theme stylesheet not found: {stylesheet_path}")
 
 
 def setup_translations(app: QApplication) -> list[QTranslator]:

@@ -41,7 +41,7 @@ merge-scores = []
 
 [tool.pyside6-project]
     exclude = ["dist", "output"]
-    files   = ["assets", "i18n", "src/merge_scores/ui.py", "src/merge_scores/modules", "src/merge_scores/ui", "style/musescore_dark.qss"]
+    files   = ["assets", "i18n", "src/merge_scores/ui.py", "src/merge_scores/modules", "src/merge_scores/ui_resources"]
 
 [tool.deptry.per_rule_ignores]
 DEP003 = "merge_scores"

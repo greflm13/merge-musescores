@@ -6,7 +6,6 @@ Merge donor .mscz into a base .mscz by appending <Staff id="n"> contents
 from __future__ import annotations
 
 import argparse
-from Crypto.Hash import MD4
 import io
 import logging
 import os
@@ -18,9 +17,11 @@ import xml.etree.ElementTree as ET
 import zipfile
 from copy import deepcopy
 from datetime import datetime
-from pathlib import Path
 from importlib.metadata import version
+from pathlib import Path
 from typing import cast
+
+from Crypto.Hash import MD4
 
 from merge_scores.modules.logger import LATEST_LOG_FILE, JSONFormatter, rotate_log_file
 

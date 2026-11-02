@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file>assets/icon.svg</file>
         <file>assets/check.svg</file>
+        <file>style/musescore_dark.qss</file>
     </qresource>
     <qresource prefix="/translations">
         <file>i18n/i18n_en.qm</file>
