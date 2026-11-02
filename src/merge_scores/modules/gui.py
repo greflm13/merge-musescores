@@ -6,9 +6,10 @@ from PySide6.QtCore import (
     QObject,
     QStandardPaths,
     QThread,
+    QUrl,
     Signal,
 )
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -129,9 +130,9 @@ class MergeWindow(QMainWindow):
         start_dir = str(scores if scores.exists() else docs)
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Select MuseScore Files",
+            self.tr("Select MuseScore Files"),
             start_dir,  # start directory
-            "MuseScore Files (*.mscz);;All Files (*)",
+            self.tr("MuseScore Files (*.mscz);;All Files (*)"),
         )
 
         if not files:
@@ -180,9 +181,9 @@ class MergeWindow(QMainWindow):
         start_dir = str(styles if styles.exists() else docs)
         style, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Style File",
+            self.tr("Select Style File"),
             start_dir,
-            "MuseScore Style Files (*.mss);;All Files (*)",
+            self.tr("MuseScore Style Files (*.mss);;All Files (*)"),
         )
 
         if not style:
@@ -194,9 +195,9 @@ class MergeWindow(QMainWindow):
         start_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
         title_svg, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Title Page",
+            self.tr("Select Title Page"),
             start_dir,
-            "Scalable Vector Graphics (*.svg);;All Files (*)",
+            self.tr("Scalable Vector Graphics (*.svg);;All Files (*)"),
         )
 
         if not title_svg:
@@ -241,7 +242,7 @@ class MergeWindow(QMainWindow):
 
     def run_merge(self):
         if not self.validate():
-            QMessageBox.warning(self, "Missing Information", "Please fill in all required fields.")
+            QMessageBox.warning(self, self.tr("Missing Information"), self.tr("Please fill in all required fields."))
             return
         files = [self.ui.fileList.item(i).text() for i in range(self.ui.fileList.count())]
 
@@ -266,7 +267,23 @@ class MergeWindow(QMainWindow):
         self.merge_thread.started.connect(self.merge_worker.run)
         self.merge_worker.finished.connect(self.enable_merge)
         self.merge_worker.finished.connect(self.merge_thread.quit)
+        self.merge_worker.finished.connect(self.show_done_dialog)
         self.merge_worker.finished.connect(self.merge_worker.deleteLater)
         self.merge_thread.finished.connect(self.merge_thread.deleteLater)
 
         self.merge_thread.start()
+
+    def show_done_dialog(self):
+        mscz_path = os.path.join(self.ui.txtOutputDir.text(), self.ui.txtOutputName.text() + ".mscz")
+        msg = QMessageBox(self)
+        msg.setWindowTitle(self.tr("Done"))
+        msg.setText(self.tr("Scores merged successfully."))
+        msg.setIcon(QMessageBox.Icon.Information)
+
+        open_button = msg.addButton(self.tr("Open Score"), QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(self.tr("Close"), QMessageBox.ButtonRole.RejectRole)
+
+        msg.exec()
+
+        if msg.clickedButton() == open_button:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(mscz_path))
