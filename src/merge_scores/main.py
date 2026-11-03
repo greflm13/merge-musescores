@@ -723,12 +723,12 @@ def relocate_hvtboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> No
     for _, (m_idx, tb, _, mpb) in tboxes_sorted:
         logger.debug("Inserting TBox at measure ordinal", extra={"measure_ordinal": m_idx})
         insert_before_measure_ordinal(staves, m_idx, tb, mpb)
-    for _, (m_idx, vb, _, mpb) in vboxes_sorted:
-        logger.debug("Inserting VBox at measure ordinal", extra={"measure_ordinal": m_idx})
-        insert_before_measure_ordinal(staves, m_idx, vb, mpb)
     for _, (m_idx, hb, _, mpb) in hboxes_sorted:
         logger.debug("Inserting HBox at measure ordinal", extra={"measure_ordinal": m_idx})
         insert_before_measure_ordinal(staves, m_idx, hb, mpb)
+    for _, (m_idx, vb, _, mpb) in vboxes_sorted:
+        logger.debug("Inserting VBox at measure ordinal", extra={"measure_ordinal": m_idx})
+        insert_before_measure_ordinal(staves, m_idx, vb, mpb)
 
 
 # --------------------------
@@ -1095,10 +1095,10 @@ def visual_width(s):
 def toc_line(title: str, page: int, target_width: int = 152) -> str:
     p = str(page)
 
-    remaining = target_width - visual_width(title) - visual_width(p)
+    remaining = target_width - visual_width(title) + 1 - visual_width(p)
     dots = "." * max(1, remaining)
 
-    return f"{title}{dots}{p}"
+    return f"{title} {dots}{p}"
 
 
 def create_toc(titles: list[str], toc_name: str) -> ET.Element:
