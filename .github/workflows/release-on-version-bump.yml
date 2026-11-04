@@ -177,6 +177,13 @@ jobs:
 
           magick assets/icon_1024.png -define icon:auto-resize=256,128,64,48,32,16 assets/icon.ico
 
+      - name: Generate Linux icon (.png)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt install inkscape -y
+
+          inkscape assets/icon.svg --export-filename=MergeMuseScores.png --export-width=512
+
       - name: Create virtual environment
         run: |
           python -m venv venv
@@ -224,10 +231,6 @@ jobs:
           Icon=MergeMuseScores
           Categories=AudioVideo;
           EOF
-
-          inkscape assets/icon.svg \
-            --export-filename=MergeMuseScores.png \
-            --export-width=512
 
           ./linuxdeploy-x86_64.AppImage \
             --appdir "$APPDIR" \
