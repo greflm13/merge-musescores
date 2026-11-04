@@ -54,6 +54,7 @@ jobs:
 
           LAST_COMMIT_OF_PREV=""
           PREV_VERSION=""
+          LAST_COMMIT=""
 
           for COMMIT in $(git rev-list HEAD); do
           	VERSION_AT_COMMIT=$(git show "$COMMIT:pyproject.toml" 2>/dev/null | python -c '
@@ -69,6 +70,8 @@ jobs:
           		PREV_VERSION="$VERSION_AT_COMMIT"
           		LAST_COMMIT_OF_PREV="$COMMIT"
           		break
+            else
+              LAST_COMMIT="$COMMIT"
           	fi
           done
 
@@ -81,7 +84,7 @@ jobs:
           echo "Previous version: $PREV_VERSION"
           echo "Last commit of previous version: $LAST_COMMIT_OF_PREV"
 
-          TAG="v$PREV_VERSION"
+          TAG="v$CURRENT_VERSION"
 
           if git rev-parse "$TAG" >/dev/null 2>&1; then
           	echo "Tag $TAG already exists"
@@ -89,12 +92,12 @@ jobs:
           	exit 0
           fi
 
-          git tag "$TAG" "$LAST_COMMIT_OF_PREV"
+          git tag "$TAG" "$LAST_COMMIT"
           git push origin "$TAG"
 
           echo "changed=true" >>"$GITHUB_OUTPUT"
           echo "tag=$TAG" >>"$GITHUB_OUTPUT"
-          echo "version=$PREV_VERSION" >>"$GITHUB_OUTPUT"
+          echo "version=$CURRENT_VERSION" >>"$GITHUB_OUTPUT"
 
       - name: Create draft release
         if: steps.detect.outputs.changed == 'true'
@@ -242,9 +245,6 @@ jobs:
             --icon-file MergeMuseScores.png \
             --output appimage
 
-          mv ./*.AppImage \
-            dist/MergeMuseScores-linux-${{ matrix.arch }}.AppImage
-
       - name: Build desktop app (macOS)
         if: runner.os == 'macOS'
         shell: bash
@@ -295,7 +295,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.version.outputs.tag }}
-          files: dist/*.AppImage
+          files: "*.AppImage"
 
       - name: Upload Windows asset to GitHub Release
         if: runner.os == 'Windows'
