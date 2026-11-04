@@ -308,6 +308,7 @@ jobs:
   release:
     needs:
       - version
+      - build
     runs-on: ubuntu-latest
     if: needs.version.outputs.changed == 'true'
     steps:
