@@ -1095,7 +1095,7 @@ def visual_width(s):
 def toc_line(title: str, page: int, target_width: int = 152) -> str:
     p = str(page)
 
-    remaining = target_width - visual_width(title) + 1 - visual_width(p)
+    remaining = target_width - visual_width(title) - visual_width(p) - 1
     dots = "." * max(1, remaining)
 
     return f"{title} {dots}{p}"
