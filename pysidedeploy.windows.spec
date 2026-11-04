@@ -24,7 +24,7 @@ icon = assets/icon.ico
 python_path = /home/user/.pyenv/versions/3.12.12/envs/merge-scores/bin/python
 
 # python packages to install
-packages = Nuitka[onefile]
+packages = Nuitka[onefile],pycryptodome==4.2.0
 
 # buildozer = for deploying Android application
 android_packages = buildozer==1.5.0,cython==0.29.33
@@ -68,7 +68,7 @@ macos.permissions =
 mode = onefile
 
 # specify any extra nuitka arguments
-extra_args = --quiet --noinclude-qt-translations --static-libpython=no --assume-yes-for-downloads --windows-console-mode=disable
+extra_args = --quiet --static-libpython=no --assume-yes-for-downloads --windows-console-mode=disable
 
 [buildozer]
 

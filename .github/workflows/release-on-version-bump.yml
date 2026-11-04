@@ -115,7 +115,7 @@ jobs:
             os: linux
             arch: x64
 
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
 
@@ -123,7 +123,7 @@ jobs:
             os: windows
             arch: x64
 
-          - runner: macos-latest
+          - runner: macos-15-intel
             os: macos
             arch: x64
 
@@ -196,19 +196,47 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
           pip install pyside6
-
       - name: Build desktop app (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           source venv/bin/activate
+
           pyside6-deploy -c pysidedeploy.linux.spec --force
 
-          cd dist
-          FILE=$(ls | head -n 1)
+          APPDIR=$(find dist -maxdepth 1 -type d -name "*.dist" | head -n 1)
 
-          EXT="${FILE##*.}"
-          mv "$FILE" "MergeMuseScores-linux-${{ matrix.arch }}.${EXT}"
+          if [ -z "$APPDIR" ]; then
+            echo "No .dist directory found"
+            find dist -maxdepth 3
+            exit 1
+          fi
+
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+
+          chmod +x linuxdeploy-x86_64.AppImage
+
+          cat > MergeMuseScores.desktop <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=MergeMuseScores
+          Exec=MergeMuseScores
+          Icon=MergeMuseScores
+          Categories=AudioVideo;
+          EOF
+
+          inkscape assets/icon.svg \
+            --export-filename=MergeMuseScores.png \
+            --export-width=512
+
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir "$APPDIR" \
+            --desktop-file MergeMuseScores.desktop \
+            --icon-file MergeMuseScores.png \
+            --output appimage
+
+          mv ./*.AppImage \
+            dist/MergeMuseScores-linux-${{ matrix.arch }}.AppImage
 
       - name: Build desktop app (macOS)
         if: runner.os == 'macOS'
@@ -260,7 +288,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.version.outputs.tag }}
-          files: dist/**
+          files: dist/*.AppImage
 
       - name: Upload Windows asset to GitHub Release
         if: runner.os == 'Windows'
