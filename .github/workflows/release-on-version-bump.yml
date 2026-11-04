@@ -252,6 +252,8 @@ jobs:
             --icon-file MergeMuseScores.png \
             --output appimage
 
+          rm linuxdeploy-${{ matrix.arch }}.AppImage
+
       - name: Build desktop app (macOS)
         if: runner.os == 'macOS'
         shell: bash
