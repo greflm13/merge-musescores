@@ -116,23 +116,23 @@ jobs:
         include:
           - runner: ubuntu-latest
             os: linux
-            arch: x64
+            arch: x86_64
 
           - runner: ubuntu-24.04-arm
             os: linux
-            arch: arm64
+            arch: aarch64
 
           - runner: windows-latest
             os: windows
-            arch: x64
+            arch: x86_64
 
           - runner: macos-15-intel
             os: macos
-            arch: x64
+            arch: x86_64
 
           - runner: macos-latest
             os: macos
-            arch: arm64
+            arch: aarch64
 
     runs-on: ${{ matrix.runner }}
 
@@ -215,9 +215,16 @@ jobs:
           pyside6-deploy -c pysidedeploy.linux.spec --force
 
           APPDIR=$(find dist -maxdepth 1 -type d -name "*.dist" | head -n 1)
+
           mkdir -p "$APPDIR/usr/bin"
 
-          mv "$APPDIR/ui.bin" "$APPDIR/usr/bin/MergeMuseScores"
+          cat > "$APPDIR/usr/bin/MergeMuseScores" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          ROOT="$(dirname "$(dirname "$HERE")")"
+          exec "$ROOT/ui.bin" "$@"
+          EOF
+
           chmod +x "$APPDIR/usr/bin/MergeMuseScores"
 
           if [ -z "$APPDIR" ]; then
@@ -226,9 +233,9 @@ jobs:
             exit 1
           fi
 
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.arch }}.AppImage
 
-          chmod +x linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-${{ matrix.arch }}.AppImage
 
           cat > MergeMuseScores.desktop <<EOF
           [Desktop Entry]
@@ -239,7 +246,7 @@ jobs:
           Categories=AudioVideo;
           EOF
 
-          ./linuxdeploy-x86_64.AppImage \
+          ./linuxdeploy-${{ matrix.arch }}.AppImage \
             --appdir "$APPDIR" \
             --desktop-file MergeMuseScores.desktop \
             --icon-file MergeMuseScores.png \
