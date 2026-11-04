@@ -211,7 +211,10 @@ jobs:
 
           pyside6-deploy -c pysidedeploy.linux.spec --force
 
-          APPDIR=$(find dist -maxdepth 1 -type d -name "*.dist" | head -n 1)
+          APPDIR=$(find dist -maxdepth 1 -type d -name "*.dist" | head -n 1)mkdir -p "$APPDIR/usr/bin"
+
+          mv "$APPDIR/ui.bin" "$APPDIR/usr/bin/MergeMuseScores"
+          chmod +x "$APPDIR/usr/bin/MergeMuseScores"
 
           if [ -z "$APPDIR" ]; then
             echo "No .dist directory found"
