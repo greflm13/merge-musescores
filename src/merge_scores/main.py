@@ -213,8 +213,11 @@ def adjust_metadata(score: ET.Element, attribs: dict[str, str]):
 # --------------------------
 
 
-def get_measures(staff: ET.Element) -> list[ET.Element]:
-    return [ch for ch in staff if ch.tag == "Measure"]
+def get_measures(staff: ET.Element, comments: bool = False) -> list[ET.Element]:  #
+    if comments:
+        return [ch for ch in staff if ch.tag == "Measure" or ch.tag is ET.Comment]
+    else:
+        return [ch for ch in staff if ch.tag == "Measure"]
 
 
 NOTE_TAGS = ["TimeSig", "KeySig", "BarLine", "Clef", "subtype", "sigN", "sigD", "concertKey", "multiMeasureRest"]
@@ -242,6 +245,8 @@ def strip_measure(measure: ET.Element, timesig: str) -> None:
     if measure_len:
         timesig = measure_len
     if voices is None:
+        return
+    if len(voices) == 0:
         return
     voice = voices[0]
     for parent in list(voice.iter()):
@@ -277,6 +282,8 @@ def create_section_break() -> ET.Element:
     lb = ET.Element("LayoutBreak")
     st = ET.SubElement(lb, "subtype")
     st.text = "section"
+    cm = ET.Comment("Added by merger")
+    lb.append(cm)
     return lb
 
 
@@ -680,6 +687,16 @@ def relocate_hvtboxes_to_first_staff_by_measure_ordinal(score: ET.Element) -> No
     hboxes = []
     tboxes = []
     for staff in staves:
+        comments = [(i, ch.text) for i, ch in enumerate(staff) if ch.tag is ET.Comment]
+        logger.debug(
+            "Staff end comments before HVT relocation",
+            extra={
+                "staff_id": staff.get("id"),
+                "measure_count": len(get_measures(staff)),
+                "comments": comments,
+            },
+        )
+    for staff in staves:
         for i, ch in enumerate(list(staff)):
             end_of_score = False
             try:
@@ -745,7 +762,7 @@ def _build_placeholders_from_reference(ref_staff: ET.Element, idx: int) -> list[
     section boundaries remain consistent across all staffs.
     """
 
-    ref_ms = get_measures(ref_staff)
+    ref_ms = get_measures(ref_staff, True)
     logger.debug("Building placeholders from reference measures", extra={"reference_measures_count": len(ref_ms)})
 
     placeholders: list[ET.Element] = []
@@ -764,21 +781,6 @@ def _build_placeholders_from_reference(ref_staff: ET.Element, idx: int) -> list[
 
         cp = clone_placeholder(m, ts)
 
-        insert_index = 0
-        layout_breaks_copied = 0
-        for ch in m:
-            if ch.tag == "LayoutBreak":
-                added_by_us = False
-                for chi in ch:
-                    if chi.tag is ET.Comment:
-                        if chi.text == "Added by merger":
-                            added_by_us = True
-                if added_by_us:
-                    continue
-                cp.insert(insert_index, deepcopy(ch))
-                insert_index += 1
-                layout_breaks_copied += 1
-
         src_voice = m.find("voice")
         dst_voice = cp.find("voice")
 
@@ -794,7 +796,6 @@ def _build_placeholders_from_reference(ref_staff: ET.Element, idx: int) -> list[
             "Placeholder built for measure",
             extra={
                 "measure_number": i + 1,
-                "layout_breaks_copied": layout_breaks_copied,
                 "barlines_copied": barlines_copied,
             },
         )
