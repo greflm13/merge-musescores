@@ -1,0 +1,382 @@
+
+/* =====================================================
+   MuseScore 4 Inspired Dark Theme
+   PySide6 / Qt6
+   Dynamic  accentColor  colors from MuseScore4.ini
+   ===================================================== */
+
+/* Global */
+QWidget {
+    background-color: {{ backgroundSecondaryColor }};
+    color: {{ fontPrimaryColor }};
+    font-family: "Segoe UI", "Noto Sans", sans-serif;
+    font-size: 10pt;
+    selection-background-color: {{ accentColor }};
+    selection-color: {{ fontPrimaryColor }};
+}
+
+QMainWindow {
+    background-color: {{ backgroundSecondaryColor }};
+}
+
+/* Central area */
+QWidget#centralwidget {
+    background-color: {{ backgroundSecondaryColor }};
+}
+
+/* Labels */
+QLabel {
+    color: {{ fontPrimaryColor }};
+    background: transparent;
+    padding: 2px;
+}
+
+/* Group boxes */
+QGroupBox {
+    background-color: {{ backgroundPrimaryColor }};
+    border-radius: 6px;
+    margin-top: 13px;
+    padding: 12px 10px 10px 10px;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 6px;
+    color: #dedede;
+}
+
+QFrame {
+    background-color: {{ backgroundPrimaryColor }};
+    border-radius: 6px
+}
+
+/* Text inputs */
+QLineEdit {
+    background-color: {{ textFieldColor }};
+    border: 1px solid {{ textFieldColor }};
+    border-radius: 4px;
+    padding: 7px 9px;
+    color: {{ fontPrimaryColor }};
+    selection-background-color: {{ accentColor }};
+}
+
+QLineEdit:focus {
+    border: 1px solid {{ accentColor }};
+}
+
+/* File list */
+QListWidget {
+    background-color: {{ textFieldColor }};
+    border: 1px solid {{ textFieldColor }};
+    border-radius: 5px;
+    padding: 5px;
+    outline: none;
+}
+
+QListWidget::item {
+    background-color: transparent;
+    border-radius: 3px;
+    padding: 8px;
+    margin: 2px;
+}
+
+QListWidget::item:hover {
+    background-color: {{ accentColor | hover }};
+}
+
+QListWidget::item:selected {
+    background-color: {{ accentColor }};
+    color: {{ fontPrimaryColor }};
+}
+
+/* Buttons */
+QPushButton {
+    background-color: {{ buttonColor }};
+    border-radius: 4px;
+    color: {{ fontPrimaryColor }};
+    padding: 7px 14px;
+    min-height: 20px;
+}
+
+QPushButton:hover {
+    background-color: {{ buttonColor | hover }};
+}
+
+QPushButton:pressed {
+    background-color: {{ buttonColor | pressed }};
+}
+
+QPushButton:disabled {
+    background-color: {{ buttonColor | disabled }};
+}
+
+/* Main action button */
+QPushButton#btnMerge {
+    background-color: {{ accentColor }};
+    border-radius: 4px;
+    color: white;
+    font-weight: 600;
+    min-height: 28px;
+}
+
+QPushButton#btnMerge:hover {
+    background-color: {{ accentColor  | hover}};
+}
+
+QPushButton#btnMerge:pressed {
+    background-color: {{ accentColor  | pressed}};
+}
+
+QPushButton#btnMerge:disabled {
+    background-color: {{ accentColor  | disabled }};
+}
+
+/* Add files button */
+QPushButton#btnAddFiles {
+    background-color: {{ accentColor }};
+}
+
+QPushButton#btnAddFiles:hover {
+    background-color: {{ accentColor  | hover}};
+}
+
+QPushButton#btnAddFiles:pressed {
+    background-color: {{ accentColor  | pressed}};
+}
+
+/* Open score button */
+QPushButton#openScoreButton {
+    background-color: {{ accentColor }};
+}
+
+QPushButton#openScoreButton:hover {
+    background-color: {{ accentColor  | hover}};
+}
+
+QPushButton#openScoreButton:pressed {
+    background-color: {{ accentColor  | pressed}};
+}
+
+/* OK button */
+QPushButton#acceptButton {
+    background-color: {{ accentColor }};
+}
+
+QPushButton#acceptButton:hover {
+    background-color: {{ accentColor  | hover }};
+}
+
+QPushButton#acceptButton:pressed {
+    background-color: {{ accentColor  | pressed }};
+}
+
+QPushButton#acceptButton:disabled {
+    background-color: {{ accentColor  | disabled }};
+}
+
+QComboBox {
+    background-color: {{ buttonColor }};
+    border: 1px solid {{ buttonColor }};
+    border-radius: 4px;
+    color: {{ fontPrimaryColor }};
+    padding: 7px 14px;
+    min-height: 20px;
+}
+
+QComboBox::drop-down {
+    background-color: {{ buttonColor }};
+    border: none;
+    width: 24px;
+}
+
+QComboBox::down-arrow {
+    image: url(:/assets/arrow-down.svg);
+}
+
+QToolButton {
+    background-color: {{ backgroundSecondaryColor }};
+    border-radius: 4px;
+    color: {{ fontPrimaryColor }};
+    min-height: 20px;
+}
+
+QToolButton:hover {
+    background-color: {{ backgroundSecondaryColor | hover }};
+}
+
+QToolButton:pressed {
+    background-color: {{ backgroundSecondaryColor | pressed }};
+}
+
+QToolButton:disabled {
+    background-color: {{ backgroundSecondaryColor | disabled }};
+}
+
+
+/* Checkboxes */
+QCheckBox {
+    spacing: 8px;
+    color: {{ fontPrimaryColor }};
+    background: transparent;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid {{ buttonColor }};
+    border-radius: 3px;
+    background-color: {{ buttonColor }};
+}
+
+QCheckBox::indicator:hover {
+    border-color: {{ accentColor }};
+}
+
+QCheckBox::indicator:checked {
+    background-color: {{ accentColor }};
+    border: 1px solid {{ accentColor }};
+    image: url(:/assets/check.svg);
+}
+
+/* Log output */
+QPlainTextEdit {
+    background-color: {{ textFieldColor }};
+    color: {{ fontPrimaryColor }};
+    border: 1px solid {{ textFieldColor }};
+    border-radius: 5px;
+    padding: 8px;
+    font-family: "Consolas", "Cascadia Mono", monospace;
+    font-size: 9pt;
+}
+
+/* Toolbar */
+QToolBar {
+    background-color: {{ backgroundSecondaryColor }};
+    border: none;
+    border-bottom: 1px solid {{ backgroundSecondaryColor }};
+    spacing: 6px;
+    padding: 5px;
+}
+
+QToolBar::separator {
+    background-color: {{ backgroundSecondaryColor | border }};
+    width: 1px;
+    margin: 4px;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    background-color: {{ backgroundPrimaryColor }};
+    width: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background-color: {{ backgroundSecondaryColor }};
+    min-height: 25px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: {{ backgroundSecondaryColor | hover }};
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background-color: {{ backgroundPrimaryColor }};
+    height: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: {{ backgroundSecondaryColor }};
+    min-width: 25px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: {{ backgroundSecondaryColor | hover }};
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+/* Tooltips */
+QToolTip {
+    background-color: {{ backgroundSecondaryColor }};
+    color: {{ fontPrimaryColor }};
+    border: 1px solid {{ backgroundSecondaryColor }};
+    padding: 5px;
+    border-radius: 3px;
+}
+
+/* Menus */
+QMenu {
+    background-color: {{ backgroundPrimaryColor }};
+    color: {{ fontPrimaryColor }};
+    border: 1px solid {{ backgroundPrimaryColor }};
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 7px 25px;
+    border-radius: 3px;
+}
+
+QMenu::item:selected {
+    background-color: {{ accentColor }};
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: {{ backgroundSecondaryColor }};
+    margin: 4px 8px;
+}
+
+QLabel#qt_msgbox_label {
+    background: transparent;
+}
+
+QLabel#qt_msgboxex_icon_label {
+    background: transparent;
+}
+
+QLabel#lookInLabel {
+    background: transparent;
+}
+
+QLabel#fileNameLabel {
+    background: transparent;
+}
+
+QLabel#fileTypeLabel {
+    background: transparent;
+}
+
+/* File list */
+QTreeView {
+    background-color: {{ backgroundPrimaryColor }};
+    alternate-background-color: {{ backgroundSecondaryColor }};
+    color: {{ fontPrimaryColor }};
+    border: none;
+    border-bottom-left-radius: 0px;
+    border-top-left-radius: 0px;
+    selection-background-color: {{ accentColor }};
+    selection-color: {{ fontPrimaryColor }};
+}
+
+/* Header */
+QHeaderView::section {
+    background-color: {{ buttonColor }};
+    color: {{ fontPrimaryColor }};
+    border: none;
+    border-right: 1px solid {{ buttonColor | border }};
+    padding: 4px 8px;
+}

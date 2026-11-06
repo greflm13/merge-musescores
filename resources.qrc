@@ -2,8 +2,8 @@
     <qresource prefix="/">
         <file>assets/icon.svg</file>
         <file>assets/check.svg</file>
-        <file>style/dark.qss</file>
-        <file>style/light.qss</file>
+        <file>assets/arrow-down.svg</file>
+        <file>style/style.qss.j2</file>
     </qresource>
     <qresource prefix="/translations">
         <file>i18n/i18n_en.qm</file>

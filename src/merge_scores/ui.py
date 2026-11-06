@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 
-import sys
-import platform
-import os
 import json
+import os
+import platform
+import sys
 from pathlib import Path
+from typing import Any
 
+from jinja2 import Environment, StrictUndefined
 from PySide6.QtCore import QFile, QIODevice, QLibraryInfo, QLocale, QTranslator
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 
 import merge_scores.ui_resources.resources_rc  # noqa: F401
 from merge_scores.main import get_version
 from merge_scores.modules.gui import APP_ICON, MergeWindow
-from typing import Any
 
 
 def get_musescore_config_file() -> Path:
@@ -26,6 +27,68 @@ def get_musescore_config_file() -> Path:
 
 
 CONFIG_FILE = get_musescore_config_file()
+
+
+def hover_filter(color: str) -> str:
+    return QColor(color).lighter(115).name()
+
+
+def hover_border_filter(color: str) -> str:
+    return QColor(color).lighter(115).name()
+
+
+def pressed_filter(color: str) -> str:
+    return QColor(color).darker(115).name()
+
+
+def pressed_border_filter(color: str) -> str:
+    return QColor(color).darker(115).darker(125).name()
+
+
+def border_filter(color: str) -> str:
+    return QColor(color).darker(125).name()
+
+
+def disabled_filter(color: str) -> str:
+    c = QColor(color)
+
+    disabled = QColor()
+    disabled.setHsl(
+        c.hslHue(),
+        int(c.hslSaturation() * 0.2),
+        c.lightness(),
+        c.alpha(),
+    )
+
+    return disabled.name()
+
+
+def disabled_border_filter(color: str) -> str:
+    c = QColor(color)
+
+    disabled = QColor()
+    disabled.setHsl(
+        c.hslHue(),
+        int(c.hslSaturation() * 0.4),
+        c.lightness(),
+        c.alpha(),
+    )
+
+    return disabled.darker(125).name()
+
+
+ENV = Environment(
+    undefined=StrictUndefined,
+    autoescape=False,
+)
+
+ENV.filters["hover"] = hover_filter
+ENV.filters["hoverborder"] = hover_border_filter
+ENV.filters["pressed"] = pressed_filter
+ENV.filters["pressedborder"] = pressed_border_filter
+ENV.filters["border"] = border_filter
+ENV.filters["disabled"] = disabled_filter
+ENV.filters["disabledborder"] = disabled_border_filter
 
 
 def parse_theme_json(raw: str) -> dict[str, Any]:
@@ -66,7 +129,7 @@ def load_musescore_config() -> dict[str, Any]:
     backslashes and its theme value is JSON embedded inside an INI value.
     A small parser avoids interpolation and escaping surprises.
     """
-    result: dict[str, Any] = {"theme_code": "dark", "theme": {}}
+    result: dict[str, Any] = {}
 
     if not CONFIG_FILE.is_file():
         return result
@@ -81,11 +144,8 @@ def load_musescore_config() -> dict[str, Any]:
         if not parser.has_section("ui"):
             return result
 
-        theme_code = parser.get("ui", r"application\currentThemeCode", fallback="dark").strip().strip('"')
-        result["theme_code"] = theme_code or "dark"
-
         raw_themes = parser.get("ui", r"application\themes", fallback="")
-        result["theme"] = parse_theme_json(raw_themes)
+        result = parse_theme_json(raw_themes)
 
     except (OSError, UnicodeError, ValueError) as exc:
         print(f"Could not read MuseScore preferences ({CONFIG_FILE}): {exc}")
@@ -93,50 +153,17 @@ def load_musescore_config() -> dict[str, Any]:
     return result
 
 
-def generate_accent_colors(accent: str) -> dict[str, str]:
-    color = QColor(accent)
+def setup_theme(app: QApplication, theme: dict[str, str]) -> None:
+    file = QFile(":/style/style.qss.j2")
 
-    if not color.isValid():
-        color = QColor("#397caf")
+    if file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        template_text = file.readAll().toStdString()
+        file.close()
 
-    return {
-        "ACCENT": color.name(),
-        "ACCENT_HOVER": color.lighter(115).name(),
-        "ACCENT_PRESSED": color.darker(115).name(),
-        "ACCENT_BORDER": color.darker(125).name(),
-        "ACCENT_DARK": color.darker(125).name(),
-    }
-
-
-def apply_color_to_stylesheet(stylesheet: str, color: str) -> str:
-    colors = generate_accent_colors(color)
-
-    for name, value in colors.items():
-        stylesheet = stylesheet.replace("{{" + name + "}}", value)
-
-    return stylesheet
-
-
-def setup_theme(app: QApplication, theme_code: str, theme: dict) -> None:
-    accent = theme.get("accentColor", "#397caf")
-    resource_path = f":/style/{theme_code}.qss"
-    resource_file = QFile(resource_path)
-
-    if resource_file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-        stylesheet = apply_color_to_stylesheet(resource_file.readAll().toStdString(), accent)
-        resource_file.close()
+        stylesheet = ENV.from_string(template_text).render(**{k: v for k, v in theme.items()})
 
         app.setStyleSheet(stylesheet)
         return
-
-    project_root = Path(__file__).resolve().parent.parent.parent
-    stylesheet_path = project_root / "style" / f"{theme_code}.qss"
-
-    if stylesheet_path.is_file():
-        app.setStyleSheet(apply_color_to_stylesheet(stylesheet_path.read_text(encoding="utf-8"), accent))
-        return
-
-    print(f"Theme stylesheet not found: {stylesheet_path}")
 
 
 def setup_translations(app: QApplication) -> list[QTranslator]:
@@ -169,11 +196,9 @@ def main() -> int:
 
     app.setStyle("Fusion")
 
-    settings = load_musescore_config()
+    theme = load_musescore_config()
 
-    theme_code = str(settings.get("theme_code") or "dark")
-    theme = settings.get("theme", {})
-    setup_theme(app, theme_code, theme)
+    setup_theme(app, theme)
     translators = setup_translations(app)
 
     window = MergeWindow()

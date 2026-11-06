@@ -12,12 +12,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QFileDialog,
-    QMainWindow,
-    QMessageBox,
-)
+from PySide6.QtWidgets import QAbstractItemView, QDialogButtonBox, QFileDialog, QMainWindow, QMessageBox, QPushButton
 
 from merge_scores.main import get_version, merge
 from merge_scores.ui_resources.main_window import Ui_MainWindow
@@ -59,6 +54,29 @@ def save_last_location(key: str, path: Path) -> None:
 
     with DATA_FILE.open("w", encoding="utf-8") as file:
         config.write(file)
+
+
+def prepare_file_dialog(dialog: QFileDialog) -> None:
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+
+    button_box = dialog.findChild(QDialogButtonBox)
+    if not button_box:
+        return
+
+    for button in dialog.findChildren(QPushButton):
+        role = button_box.buttonRole(button)
+
+        if role == QDialogButtonBox.ButtonRole.AcceptRole:
+            button.setObjectName("acceptButton")
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.update()
+
+        elif role == QDialogButtonBox.ButtonRole.RejectRole:
+            button.setObjectName("rejectButton")
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.update()
 
 
 class MergeWorker(QObject):
@@ -171,18 +189,24 @@ class MergeWindow(QMainWindow):
 
         default_dir = scores if scores.exists() else docs
         start_dir = get_last_location("files", default_dir)
-        files, _ = QFileDialog.getOpenFileNames(
-            self,
-            self.tr("Select MuseScore Files"),
-            start_dir,  # start directory
-            self.tr("MuseScore Files (*.mscz);;All Files (*)"),
-        )
 
-        if not files:
+        dialog = QFileDialog(self)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setWindowTitle(self.tr("Select MuseScore Files"))
+        dialog.setDirectory(str(start_dir))
+        dialog.setNameFilter(self.tr("MuseScore Files (*.mscz);;All Files (*)"))
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+
+        prepare_file_dialog(dialog)
+
+        if not dialog.exec():
             return
+
+        files = dialog.selectedFiles()
 
         for file in files:
             self.ui.fileList.addItem(file)
+
         save_last_location("files", Path(files[0]).parent)
 
     def clear_files(self):
@@ -225,15 +249,18 @@ class MergeWindow(QMainWindow):
         default_dir = styles if styles.exists() else docs
         start_dir = get_last_location("style", default_dir)
 
-        style, _ = QFileDialog.getOpenFileName(
-            self,
-            self.tr("Select Style File"),
-            start_dir,
-            self.tr("MuseScore Style Files (*.mss);;All Files (*)"),
-        )
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle(self.tr("Select Style File"))
+        dialog.setDirectory(str(start_dir))
+        dialog.setNameFilter(self.tr("MuseScore Style Files (*.mss);;All Files (*)"))
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
 
-        if not style:
+        prepare_file_dialog(dialog)
+
+        if not dialog.exec():
             return
+
+        style = dialog.selectedFiles()[0]
 
         self.ui.txtStyle.setText(style)
         save_last_location("style", Path(style).parent)
@@ -242,15 +269,19 @@ class MergeWindow(QMainWindow):
         docs = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
 
         start_dir = get_last_location("title", docs)
-        title_svg, _ = QFileDialog.getOpenFileName(
-            self,
-            self.tr("Select Title Page"),
-            start_dir,
-            self.tr("Scalable Vector Graphics (*.svg);;All Files (*)"),
-        )
 
-        if not title_svg:
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle(self.tr("Select Title Page"))
+        dialog.setDirectory(str(start_dir))
+        dialog.setNameFilter(self.tr("Scalable Vector Graphics (*.svg);;All Files (*)"))
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+
+        prepare_file_dialog(dialog)
+
+        if not dialog.exec():
             return
+
+        title_svg = dialog.selectedFiles()[0]
 
         self.ui.txtTitleSvg.setText(title_svg)
         save_last_location("title", Path(title_svg).parent)
@@ -262,15 +293,19 @@ class MergeWindow(QMainWindow):
         default_dir = scores if scores.exists() else docs
         start_dir = get_last_location("output", default_dir)
 
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            self.tr("Select Output Directory"),
-            start_dir,
-            QFileDialog.Option.ShowDirsOnly,
-        )
+        dialog = QFileDialog(self)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setFileMode(QFileDialog.FileMode.Directory)
+        dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
+        dialog.setDirectory(str(start_dir))
+        dialog.setWindowTitle(self.tr("Select Output Directory"))
 
-        if not directory:
+        prepare_file_dialog(dialog)
+
+        if not dialog.exec():
             return
+
+        directory = dialog.selectedFiles()[0]
 
         self.ui.txtOutputDir.setText(directory)
         save_last_location("output", Path(directory))
@@ -343,6 +378,10 @@ class MergeWindow(QMainWindow):
         msg.setIcon(QMessageBox.Icon.Information)
 
         open_button = msg.addButton(self.tr("Open Score"), QMessageBox.ButtonRole.AcceptRole)
+        open_button.setObjectName("openScoreButton")
+        open_button.style().unpolish(open_button)
+        open_button.style().polish(open_button)
+        open_button.update()
         msg.addButton(self.tr("Close"), QMessageBox.ButtonRole.RejectRole)
 
         msg.exec()
