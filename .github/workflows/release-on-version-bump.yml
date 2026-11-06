@@ -183,7 +183,8 @@ jobs:
       - name: Generate Linux icon (.png)
         if: runner.os == 'Linux'
         run: |
-          sudo apt install inkscape -y
+          sudo apt-get update
+          sudo apt-get install inkscape -y
 
           inkscape assets/icon.svg --export-filename=MergeMuseScores.png --export-width=512
 
