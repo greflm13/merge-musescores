@@ -4,15 +4,20 @@ import os
 import platform
 from pathlib import Path
 
-from PySide6.QtCore import (
-    QObject,
-    QStandardPaths,
-    QThread,
-    QUrl,
-    Signal,
+from PySide6.QtCore import QObject, QStandardPaths, Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QWidget,
+    QDialogButtonBox,
+    QFileDialog,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QAbstractButton,
+    QComboBox,
+    QFileIconProvider,
 )
-from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWidgets import QAbstractItemView, QDialogButtonBox, QFileDialog, QMainWindow, QMessageBox, QPushButton
 
 from merge_scores.main import get_version, merge
 from merge_scores.ui_resources.main_window import Ui_MainWindow
@@ -56,7 +61,22 @@ def save_last_location(key: str, path: Path) -> None:
         config.write(file)
 
 
-def prepare_file_dialog(dialog: QFileDialog) -> None:
+def recolor_icon(icon: QIcon, color: str, size=16) -> QIcon:
+    pixmap = icon.pixmap(size, size)
+
+    result = QPixmap(pixmap.size())
+    result.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(result)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(result.rect(), QColor(color))
+    painter.end()
+
+    return QIcon(result)
+
+
+def prepare_file_dialog(dialog: QFileDialog, icon_color: str) -> None:
     dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
 
     button_box = dialog.findChild(QDialogButtonBox)
@@ -77,6 +97,10 @@ def prepare_file_dialog(dialog: QFileDialog) -> None:
             button.style().unpolish(button)
             button.style().polish(button)
             button.update()
+
+    for widget in dialog.findChildren(QWidget):
+        if isinstance(widget, QAbstractButton):
+            widget.setIcon(recolor_icon(widget.icon(), icon_color))
 
 
 class MergeWorker(QObject):
@@ -135,8 +159,9 @@ class QtLogHandler(logging.Handler):
 
 
 class MergeWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, icon_color):
         super().__init__()
+        self.icon_color = icon_color
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -197,7 +222,7 @@ class MergeWindow(QMainWindow):
         dialog.setNameFilter(self.tr("MuseScore Files (*.mscz);;All Files (*)"))
         dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
 
-        prepare_file_dialog(dialog)
+        prepare_file_dialog(dialog, self.icon_color)
 
         if not dialog.exec():
             return
@@ -255,7 +280,7 @@ class MergeWindow(QMainWindow):
         dialog.setNameFilter(self.tr("MuseScore Style Files (*.mss);;All Files (*)"))
         dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
 
-        prepare_file_dialog(dialog)
+        prepare_file_dialog(dialog, self.icon_color)
 
         if not dialog.exec():
             return
@@ -276,7 +301,7 @@ class MergeWindow(QMainWindow):
         dialog.setNameFilter(self.tr("Scalable Vector Graphics (*.svg);;All Files (*)"))
         dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
 
-        prepare_file_dialog(dialog)
+        prepare_file_dialog(dialog, self.icon_color)
 
         if not dialog.exec():
             return
@@ -300,7 +325,7 @@ class MergeWindow(QMainWindow):
         dialog.setDirectory(str(start_dir))
         dialog.setWindowTitle(self.tr("Select Output Directory"))
 
-        prepare_file_dialog(dialog)
+        prepare_file_dialog(dialog, self.icon_color)
 
         if not dialog.exec():
             return

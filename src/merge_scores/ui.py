@@ -66,7 +66,7 @@ ENV.filters["border"] = border_filter
 ENV.filters["disabled"] = disabled_filter
 
 
-def parse_theme_json(raw: str) -> dict[str, Any]:
+def parse_theme_json(raw: str) -> list[dict[str, Any]]:
     """Decode the JSON theme object stored in MuseScore4.ini."""
     if not raw:
         return {}
@@ -78,9 +78,9 @@ def parse_theme_json(raw: str) -> dict[str, Any]:
         if isinstance(decoded, str):
             candidates.append(decoded)
         elif isinstance(decoded, list):
-            return decoded[0] if decoded and isinstance(decoded[0], dict) else {}
-        elif isinstance(decoded, dict):
             return decoded
+        elif isinstance(decoded, dict):
+            return [decoded]
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -88,26 +88,27 @@ def parse_theme_json(raw: str) -> dict[str, Any]:
         try:
             decoded = json.loads(candidate)
             if isinstance(decoded, list):
-                return decoded[0] if decoded and isinstance(decoded[0], dict) else {}
-            if isinstance(decoded, dict):
                 return decoded
+            elif isinstance(decoded, dict):
+                return [decoded]
         except (json.JSONDecodeError, TypeError):
             continue
 
     return {}
 
 
-def load_musescore_config() -> dict[str, Any]:
+def load_musescore_config() -> tuple[list[dict[str, Any]], str]:
     """Read MuseScore's INI file and return the relevant UI settings.
 
     ConfigParser is intentionally not used here: MuseScore's INI keys contain
     backslashes and its theme value is JSON embedded inside an INI value.
     A small parser avoids interpolation and escaping surprises.
     """
-    result: dict[str, Any] = {}
+    result: list[dict[str, Any]] = []
+    theme_code = "dakr"
 
     if not CONFIG_FILE.is_file():
-        return result
+        return result, theme_code
 
     try:
         import configparser
@@ -117,15 +118,16 @@ def load_musescore_config() -> dict[str, Any]:
         parser.read(CONFIG_FILE, encoding="utf-8")
 
         if not parser.has_section("ui"):
-            return result
+            return result, theme_code
 
         raw_themes = parser.get("ui", r"application\themes", fallback="")
+        theme_code = parser.get("ui", r"application\currentThemeCode", fallback="dark")
         result = parse_theme_json(raw_themes)
 
     except (OSError, UnicodeError, ValueError) as exc:
         print(f"Could not read MuseScore preferences ({CONFIG_FILE}): {exc}")
 
-    return result
+    return result, theme_code
 
 
 def setup_theme(app: QApplication, theme: dict[str, str]) -> None:
@@ -171,12 +173,16 @@ def main() -> int:
 
     app.setStyle("Fusion")
 
-    theme = load_musescore_config()
+    themes, theme_code = load_musescore_config()
+    theme = {}
+    for the in themes:
+        if the["codeKey"] == theme_code:
+            theme = the
 
     setup_theme(app, theme)
     translators = setup_translations(app)
 
-    window = MergeWindow()
+    window = MergeWindow(theme["fontPrimaryColor"])
     window.show()
 
     try:
