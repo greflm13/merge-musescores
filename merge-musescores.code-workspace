@@ -20,7 +20,8 @@
         },
         "files.associations": {
             "build.spec": "python",
-            "pysidedeploy.*.spec": "qt-pysidedeployspec"
+            "pysidedeploy.*.spec": "qt-pysidedeployspec",
+            "*.qss.j2": "jinja-css"
         }
     },
     "extensions": {

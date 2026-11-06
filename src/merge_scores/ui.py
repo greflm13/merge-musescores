@@ -33,16 +33,8 @@ def hover_filter(color: str) -> str:
     return QColor(color).lighter(115).name()
 
 
-def hover_border_filter(color: str) -> str:
-    return QColor(color).lighter(115).name()
-
-
 def pressed_filter(color: str) -> str:
     return QColor(color).darker(115).name()
-
-
-def pressed_border_filter(color: str) -> str:
-    return QColor(color).darker(115).darker(125).name()
 
 
 def border_filter(color: str) -> str:
@@ -63,32 +55,15 @@ def disabled_filter(color: str) -> str:
     return disabled.name()
 
 
-def disabled_border_filter(color: str) -> str:
-    c = QColor(color)
-
-    disabled = QColor()
-    disabled.setHsl(
-        c.hslHue(),
-        int(c.hslSaturation() * 0.4),
-        c.lightness(),
-        c.alpha(),
-    )
-
-    return disabled.darker(125).name()
-
-
 ENV = Environment(
     undefined=StrictUndefined,
     autoescape=False,
 )
 
 ENV.filters["hover"] = hover_filter
-ENV.filters["hoverborder"] = hover_border_filter
 ENV.filters["pressed"] = pressed_filter
-ENV.filters["pressedborder"] = pressed_border_filter
 ENV.filters["border"] = border_filter
 ENV.filters["disabled"] = disabled_filter
-ENV.filters["disabledborder"] = disabled_border_filter
 
 
 def parse_theme_json(raw: str) -> dict[str, Any]:
