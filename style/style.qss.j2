@@ -1,6 +1,6 @@
 
 /* =====================================================
-   MuseScore 4 Inspired Dark Theme
+   MuseScore 4 Inspired Theme
    PySide6 / Qt6
    Dynamic  accentColor  colors from MuseScore4.ini
    ===================================================== */
@@ -68,7 +68,7 @@ QLineEdit:focus {
 }
 
 /* File list */
-QListWidget {
+QListWidget#fileList {
     background-color: {{ textFieldColor }};
     border: 1px solid {{ textFieldColor }};
     border-radius: 5px;
@@ -76,18 +76,18 @@ QListWidget {
     outline: none;
 }
 
-QListWidget::item {
+QListWidget#fileList::item {
     background-color: transparent;
     border-radius: 3px;
     padding: 8px;
     margin: 2px;
 }
 
-QListWidget::item:hover {
+QListWidget#fileList::item:hover {
     background-color: {{ accentColor | hover }};
 }
 
-QListWidget::item:selected {
+QListWidget#fileList::item:selected {
     background-color: {{ accentColor }};
     color: {{ fontPrimaryColor }};
 }
@@ -378,4 +378,29 @@ QHeaderView::section {
     border: none;
     border-right: 1px solid {{ buttonColor | border }};
     padding: 4px 8px;
+}
+
+/* Name suggestions */
+QAbstractItemView#nameCompleterPopup {
+    background-color: {{ backgroundSecondaryColor }};
+    color: {{ fontPrimaryColor }};
+    border: 1px solid {{ backgroundSecondaryColor }};
+    border-radius: 6px;
+    outline: none;
+}
+
+QAbstractItemView#nameCompleterPopup::item {
+    padding: 7px 10px;
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+QAbstractItemView#nameCompleterPopup::item:hover {
+    background-color: {{ accentColor | hover }};
+    color: {{ fontPrimaryColor }};
+}
+
+QAbstractItemView#nameCompleterPopup::item:selected {
+    background-color: {{ accentColor }};
+    color: {{ fontPrimaryColor }};
 }

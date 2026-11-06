@@ -2,21 +2,22 @@ import configparser
 import logging
 import os
 import platform
+import json
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QStandardPaths, Qt, QThread, QUrl, Signal
+from PySide6.QtCore import QObject, QStandardPaths, Qt, QThread, QUrl, Signal, QSortFilterProxyModel, QStringListModel
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractItemView,
-    QWidget,
     QDialogButtonBox,
     QFileDialog,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QAbstractButton,
-    QComboBox,
-    QFileIconProvider,
+    QWidget,
+    QCompleter,
+    QListView,
 )
 
 from merge_scores.main import get_version, merge
@@ -32,7 +33,7 @@ else:
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-DATA_FILE = DATA_DIR / "paths.ini"
+DATA_FILE = DATA_DIR / "MergeMuseScores.ini"
 
 config = configparser.ConfigParser()
 
@@ -50,12 +51,68 @@ def get_last_location(key: str, fallback: Path) -> str:
     return str(fallback)
 
 
+def get_last_name(key: str, fallback: str) -> str:
+    """Return the last selected name or the default name."""
+    name = config.get("Names", key, fallback=str(fallback))
+    return name
+
+
+def get_name_history(key: str, limit: int = 20) -> list[str]:
+    """Return previously used names, newest first."""
+    raw = config.get("History", key, fallback="[]")
+
+    try:
+        history = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    if not isinstance(history, list):
+        return []
+
+    return [name for name in history if isinstance(name, str) and name.strip()][:limit]
+
+
 def save_last_location(key: str, path: Path) -> None:
     """Save the last selected location."""
     if not config.has_section("Locations"):
         config.add_section("Locations")
 
     config.set("Locations", key, str(path))
+
+    with DATA_FILE.open("w", encoding="utf-8") as file:
+        config.write(file)
+
+
+def save_last_name(key: str, name: str) -> None:
+    """Save the last name."""
+    if not config.has_section("Names"):
+        config.add_section("Names")
+
+    config.set("Names", key, name)
+
+    with DATA_FILE.open("w", encoding="utf-8") as file:
+        config.write(file)
+
+
+def save_name_history(key: str, name: str, limit: int = 20) -> None:
+    """Save a name to history, moving it to the front."""
+    name = name.strip()
+
+    if not name:
+        return
+
+    history = get_name_history(key, limit)
+
+    history = [item for item in history if item.casefold() != name.casefold()]
+
+    history.insert(0, name)
+
+    history = history[:limit]
+
+    if not config.has_section("History"):
+        config.add_section("History")
+
+    config.set("History", key, json.dumps(history, ensure_ascii=False))
 
     with DATA_FILE.open("w", encoding="utf-8") as file:
         config.write(file)
@@ -101,6 +158,130 @@ def prepare_file_dialog(dialog: QFileDialog, icon_color: str) -> None:
     for widget in dialog.findChildren(QWidget):
         if isinstance(widget, QAbstractButton):
             widget.setIcon(recolor_icon(widget.icon(), icon_color))
+
+
+class FuzzyFilterProxyModel(QSortFilterProxyModel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.query = ""
+
+        self.setDynamicSortFilter(True)
+
+    def set_query(self, query: str) -> None:
+        self.query = query.casefold().strip()
+        self.invalidateFilter()
+        self.sort(0, Qt.SortOrder.AscendingOrder)
+
+    def score(self, text: str) -> tuple[int, int, int] | None:
+        text = text.casefold()
+        query = self.query
+
+        if not query:
+            return (0, 0, 0)
+
+        if query in text:
+            return (0, text.index(query), len(text) - len(query))
+
+        positions: list[int] = []
+        position = 0
+
+        for char in query:
+            position = text.find(char, position)
+
+            if position == -1:
+                return None
+
+            positions.append(position)
+            position += 1
+
+        first = positions[0]
+        span = positions[-1] - first + 1
+        gaps = span - len(query)
+
+        return (1, first, gaps)
+
+    def filterAcceptsRow(self, source_row, source_parent) -> bool:
+        index = self.sourceModel().index(source_row, 0, source_parent)
+        text = self.sourceModel().data(index)
+
+        return self.score(str(text)) is not None
+
+    def lessThan(self, left, right):
+        left_text = str(self.sourceModel().data(left))
+        right_text = str(self.sourceModel().data(right))
+
+        left_score = self.score(left_text)
+        right_score = self.score(right_text)
+
+        if left_score is None:
+            return False
+
+        if right_score is None:
+            return True
+
+        return left_score < right_score
+
+
+class FuzzyCompleter(QCompleter):
+    def __init__(self, line_edit, suggestions=None, parent=None):
+        super().__init__(parent or line_edit)
+
+        self.line_edit = line_edit
+
+        self.source_model = QStringListModel(
+            suggestions or [],
+            self,
+        )
+
+        self.proxy_model = FuzzyFilterProxyModel(self)
+        self.proxy_model.setSourceModel(self.source_model)
+
+        self.setModel(self.proxy_model)
+        self.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.setFilterMode(Qt.MatchFlag.MatchContains)
+
+        line_edit.setCompleter(self)
+
+        line_edit.textEdited.connect(self.update_suggestions)
+
+        self.activated.connect(self.apply_suggestion)
+
+        popup = self.popup()
+
+        if isinstance(popup, QListView):
+            popup.setObjectName("nameCompleterPopup")
+            popup.setSpacing(0)
+            popup.setUniformItemSizes(True)
+            popup.setMaximumHeight(250)
+            popup.setMinimumHeight(0)
+
+    def update_suggestions(self, text: str):
+        self.proxy_model.set_query(text)
+
+        if not text.strip():
+            popup = self.popup()
+            if popup is not None:
+                popup.hide()
+            return
+
+        self.setCompletionPrefix("")
+
+        if self.proxy_model.rowCount() > 0:
+            self.complete()
+        else:
+            popup = self.popup()
+            if popup is not None:
+                popup.hide()
+
+    def apply_suggestion(self, text: str):
+        self.line_edit.setText(text)
+
+    def update_history(self, suggestions: list[str]):
+        self.source_model.setStringList(suggestions)
+
+    def splitPath(self, path: str) -> list[str]:
+        return [""]
 
 
 class MergeWorker(QObject):
@@ -187,6 +368,8 @@ class MergeWindow(QMainWindow):
         self.ui.btnBrowseOutputDir.clicked.connect(self.browse_output_dir)
         self.ui.btnMerge.clicked.connect(self.run_merge)
         self.ui.txtOutputDir.setText(start_dir)
+        self.output_name_completer = FuzzyCompleter(self.ui.txtOutputName, get_name_history("out_file"), self)
+        self.ui.txtTocName.setText(get_last_name("toc", self.tr("Table of Contents")))
         self.ui.actionInfo.triggered.connect(self._show_info_dialog)
 
         handler = QtLogHandler()
@@ -368,6 +551,10 @@ class MergeWindow(QMainWindow):
             QMessageBox.warning(self, self.tr("Missing Information"), self.tr("Please fill in all required fields."))
             return
         files = [self.ui.fileList.item(i).text() for i in range(self.ui.fileList.count())]
+
+        save_last_name("toc", self.ui.txtTocName.text())
+        save_name_history("out_file", self.ui.txtOutputName.text().strip())
+        self.output_name_completer.update_history(get_name_history("out_file"))
 
         self.ui.btnMerge.setEnabled(False)
 

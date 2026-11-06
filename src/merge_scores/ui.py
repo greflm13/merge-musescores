@@ -69,7 +69,7 @@ ENV.filters["disabled"] = disabled_filter
 def parse_theme_json(raw: str) -> list[dict[str, Any]]:
     """Decode the JSON theme object stored in MuseScore4.ini."""
     if not raw:
-        return {}
+        return []
 
     candidates = [raw.strip()]
 
@@ -94,7 +94,7 @@ def parse_theme_json(raw: str) -> list[dict[str, Any]]:
         except (json.JSONDecodeError, TypeError):
             continue
 
-    return {}
+    return []
 
 
 def load_musescore_config() -> tuple[list[dict[str, Any]], str]:
@@ -114,7 +114,7 @@ def load_musescore_config() -> tuple[list[dict[str, Any]], str]:
         import configparser
 
         parser = configparser.ConfigParser(interpolation=None)
-        parser.optionxform = str
+        parser.optionxform = str  # pyright: ignore[reportAttributeAccessIssue]
         parser.read(CONFIG_FILE, encoding="utf-8")
 
         if not parser.has_section("ui"):
