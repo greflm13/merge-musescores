@@ -5,7 +5,7 @@ import platform
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QStandardPaths, Qt, QThread, QUrl, Signal, QSortFilterProxyModel, QStringListModel
+from PySide6.QtCore import QObject, QStandardPaths, Qt, QThread, QUrl, Signal, QSortFilterProxyModel, QStringListModel, QSize
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -118,10 +118,16 @@ def save_name_history(key: str, name: str, limit: int = 20) -> None:
         config.write(file)
 
 
-def recolor_icon(icon: QIcon, color: str, size=16) -> QIcon:
-    pixmap = icon.pixmap(size, size)
+def recolor_icon(icon: QIcon, color: str, size: int = 16) -> QIcon:
+    pixmap = icon.pixmap(QSize(size, size))
+
+    if pixmap.isNull():
+        return icon
+
+    dpr = pixmap.devicePixelRatioF()
 
     result = QPixmap(pixmap.size())
+    result.setDevicePixelRatio(dpr)
     result.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(result)
