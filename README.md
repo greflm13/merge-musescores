@@ -1,6 +1,6 @@
 # MergeMuseScores
 
-Merge multiple MuseScore 4 (`.mscz`) scores into a single conductor-style score while automatically handling staff alignment, missing instruments, section breaks, page breaks, title pages, and table of contents generation.
+Merge multiple MuseScore 4 (`.mscz`) scores into a single score while automatically handling staff alignment, missing instruments, section breaks, page breaks, title pages, and table of contents generation.
 
 ## Features
 
