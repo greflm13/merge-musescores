@@ -754,10 +754,13 @@ qt_resource_struct = b"\
 \x00\x00\x01\xa1\xb8\x07\x18\xee\
 "
 
+
 def qInitResources():
     QtCore.qRegisterResourceData(0x03, qt_resource_struct, qt_resource_name, qt_resource_data)
 
+
 def qCleanupResources():
     QtCore.qUnregisterResourceData(0x03, qt_resource_struct, qt_resource_name, qt_resource_data)
+
 
 qInitResources()

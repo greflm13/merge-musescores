@@ -1,23 +1,23 @@
 import configparser
+import json
 import logging
 import os
 import platform
-import json
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QStandardPaths, Qt, QThread, QUrl, Signal, QSortFilterProxyModel, QStringListModel, QSize
+from PySide6.QtCore import QObject, QSize, QSortFilterProxyModel, QStandardPaths, QStringListModel, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
+    QCompleter,
     QDialogButtonBox,
     QFileDialog,
+    QListView,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QWidget,
-    QCompleter,
-    QListView,
 )
 
 from merge_scores.main import get_version, merge

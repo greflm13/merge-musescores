@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 ################################################################################
 ## Form generated from reading UI file 'main_window.ui'
 ##
@@ -8,61 +6,70 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
-    QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt)
-from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
-    QCursor, QFont, QFontDatabase, QGradient,
-    QIcon, QImage, QKeySequence, QLinearGradient,
-    QPainter, QPalette, QPixmap, QRadialGradient,
-    QTransform)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QFormLayout,
-    QFrame, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMainWindow, QPlainTextEdit, QPushButton, QSizePolicy,
-    QSpacerItem, QToolBar, QVBoxLayout, QWidget)
+from PySide6.QtCore import QCoreApplication, QMetaObject, QSize, Qt
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QPlainTextEdit,
+    QPushButton,
+    QSizePolicy,
+    QSpacerItem,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
 
-class Ui_MainWindow(object):
+
+class Ui_MainWindow:
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
-            MainWindow.setObjectName(u"MainWindow")
+            MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1224, 887)
         MainWindow.setMinimumSize(QSize(384, 832))
         self.actionInfo = QAction(MainWindow)
-        self.actionInfo.setObjectName(u"actionInfo")
+        self.actionInfo.setObjectName("actionInfo")
         self.actionInfo.setMenuRole(QAction.MenuRole.AboutRole)
         self.centralwidget = QWidget(MainWindow)
-        self.centralwidget.setObjectName(u"centralwidget")
+        self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout = QVBoxLayout(self.centralwidget)
-        self.verticalLayout.setObjectName(u"verticalLayout")
+        self.verticalLayout.setObjectName("verticalLayout")
         self.fileGroupBox = QGroupBox(self.centralwidget)
-        self.fileGroupBox.setObjectName(u"fileGroupBox")
+        self.fileGroupBox.setObjectName("fileGroupBox")
         self.gridLayout = QGridLayout(self.fileGroupBox)
-        self.gridLayout.setObjectName(u"gridLayout")
+        self.gridLayout.setObjectName("gridLayout")
         self.gridLayout.setVerticalSpacing(6)
         self.fileList = QListWidget(self.fileGroupBox)
-        self.fileList.setObjectName(u"fileList")
+        self.fileList.setObjectName("fileList")
         self.fileList.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.fileList.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
         self.gridLayout.addWidget(self.fileList, 0, 0, 1, 1)
 
         self.verticalFrame = QFrame(self.fileGroupBox)
-        self.verticalFrame.setObjectName(u"verticalFrame")
+        self.verticalFrame.setObjectName("verticalFrame")
         self.verticalLayout_2 = QVBoxLayout(self.verticalFrame)
-        self.verticalLayout_2.setObjectName(u"verticalLayout_2")
+        self.verticalLayout_2.setObjectName("verticalLayout_2")
         self.btnUp = QPushButton(self.verticalFrame)
-        self.btnUp.setObjectName(u"btnUp")
+        self.btnUp.setObjectName("btnUp")
 
         self.verticalLayout_2.addWidget(self.btnUp)
 
         self.btnRemoveFiles = QPushButton(self.verticalFrame)
-        self.btnRemoveFiles.setObjectName(u"btnRemoveFiles")
+        self.btnRemoveFiles.setObjectName("btnRemoveFiles")
 
         self.verticalLayout_2.addWidget(self.btnRemoveFiles)
 
         self.btnDown = QPushButton(self.verticalFrame)
-        self.btnDown.setObjectName(u"btnDown")
+        self.btnDown.setObjectName("btnDown")
 
         self.verticalLayout_2.addWidget(self.btnDown)
 
@@ -71,171 +78,182 @@ class Ui_MainWindow(object):
         self.verticalLayout_2.addItem(self.verticalSpacer)
 
         self.btnClearFiles = QPushButton(self.verticalFrame)
-        self.btnClearFiles.setObjectName(u"btnClearFiles")
+        self.btnClearFiles.setObjectName("btnClearFiles")
 
         self.verticalLayout_2.addWidget(self.btnClearFiles)
 
         self.btnAddFiles = QPushButton(self.verticalFrame)
-        self.btnAddFiles.setObjectName(u"btnAddFiles")
+        self.btnAddFiles.setObjectName("btnAddFiles")
 
         self.verticalLayout_2.addWidget(self.btnAddFiles)
 
-
         self.gridLayout.addWidget(self.verticalFrame, 0, 4, 1, 1)
-
 
         self.verticalLayout.addWidget(self.fileGroupBox)
 
         self.groupOptions = QGroupBox(self.centralwidget)
-        self.groupOptions.setObjectName(u"groupOptions")
+        self.groupOptions.setObjectName("groupOptions")
         self.formLayout = QFormLayout(self.groupOptions)
-        self.formLayout.setObjectName(u"formLayout")
+        self.formLayout.setObjectName("formLayout")
         self.labelOutputName = QLabel(self.groupOptions)
-        self.labelOutputName.setObjectName(u"labelOutputName")
+        self.labelOutputName.setObjectName("labelOutputName")
 
         self.formLayout.setWidget(0, QFormLayout.ItemRole.LabelRole, self.labelOutputName)
 
         self.txtOutputName = QLineEdit(self.groupOptions)
-        self.txtOutputName.setObjectName(u"txtOutputName")
+        self.txtOutputName.setObjectName("txtOutputName")
 
         self.formLayout.setWidget(0, QFormLayout.ItemRole.FieldRole, self.txtOutputName)
 
         self.labelOutputDir = QLabel(self.groupOptions)
-        self.labelOutputDir.setObjectName(u"labelOutputDir")
+        self.labelOutputDir.setObjectName("labelOutputDir")
 
         self.formLayout.setWidget(1, QFormLayout.ItemRole.LabelRole, self.labelOutputDir)
 
         self.layoutOutputDir = QHBoxLayout()
-        self.layoutOutputDir.setObjectName(u"layoutOutputDir")
+        self.layoutOutputDir.setObjectName("layoutOutputDir")
         self.txtOutputDir = QLineEdit(self.groupOptions)
-        self.txtOutputDir.setObjectName(u"txtOutputDir")
+        self.txtOutputDir.setObjectName("txtOutputDir")
 
         self.layoutOutputDir.addWidget(self.txtOutputDir)
 
         self.btnBrowseOutputDir = QPushButton(self.groupOptions)
-        self.btnBrowseOutputDir.setObjectName(u"btnBrowseOutputDir")
+        self.btnBrowseOutputDir.setObjectName("btnBrowseOutputDir")
 
         self.layoutOutputDir.addWidget(self.btnBrowseOutputDir)
-
 
         self.formLayout.setLayout(1, QFormLayout.ItemRole.FieldRole, self.layoutOutputDir)
 
         self.labelStyle = QLabel(self.groupOptions)
-        self.labelStyle.setObjectName(u"labelStyle")
+        self.labelStyle.setObjectName("labelStyle")
 
         self.formLayout.setWidget(2, QFormLayout.ItemRole.LabelRole, self.labelStyle)
 
         self.layoutStyle = QHBoxLayout()
-        self.layoutStyle.setObjectName(u"layoutStyle")
+        self.layoutStyle.setObjectName("layoutStyle")
         self.txtStyle = QLineEdit(self.groupOptions)
-        self.txtStyle.setObjectName(u"txtStyle")
+        self.txtStyle.setObjectName("txtStyle")
 
         self.layoutStyle.addWidget(self.txtStyle)
 
         self.btnBrowseStyle = QPushButton(self.groupOptions)
-        self.btnBrowseStyle.setObjectName(u"btnBrowseStyle")
+        self.btnBrowseStyle.setObjectName("btnBrowseStyle")
 
         self.layoutStyle.addWidget(self.btnBrowseStyle)
-
 
         self.formLayout.setLayout(2, QFormLayout.ItemRole.FieldRole, self.layoutStyle)
 
         self.chkToc = QCheckBox(self.groupOptions)
-        self.chkToc.setObjectName(u"chkToc")
+        self.chkToc.setObjectName("chkToc")
 
         self.formLayout.setWidget(4, QFormLayout.ItemRole.FieldRole, self.chkToc)
 
         self.labelTocName = QLabel(self.groupOptions)
-        self.labelTocName.setObjectName(u"labelTocName")
+        self.labelTocName.setObjectName("labelTocName")
 
         self.formLayout.setWidget(5, QFormLayout.ItemRole.LabelRole, self.labelTocName)
 
         self.txtTocName = QLineEdit(self.groupOptions)
-        self.txtTocName.setObjectName(u"txtTocName")
+        self.txtTocName.setObjectName("txtTocName")
 
         self.formLayout.setWidget(5, QFormLayout.ItemRole.FieldRole, self.txtTocName)
 
         self.labelTitleSvg = QLabel(self.groupOptions)
-        self.labelTitleSvg.setObjectName(u"labelTitleSvg")
+        self.labelTitleSvg.setObjectName("labelTitleSvg")
 
         self.formLayout.setWidget(6, QFormLayout.ItemRole.LabelRole, self.labelTitleSvg)
 
         self.layoutTitleSvg = QHBoxLayout()
-        self.layoutTitleSvg.setObjectName(u"layoutTitleSvg")
+        self.layoutTitleSvg.setObjectName("layoutTitleSvg")
         self.txtTitleSvg = QLineEdit(self.groupOptions)
-        self.txtTitleSvg.setObjectName(u"txtTitleSvg")
+        self.txtTitleSvg.setObjectName("txtTitleSvg")
 
         self.layoutTitleSvg.addWidget(self.txtTitleSvg)
 
         self.btnBrowseTitleSvg = QPushButton(self.groupOptions)
-        self.btnBrowseTitleSvg.setObjectName(u"btnBrowseTitleSvg")
+        self.btnBrowseTitleSvg.setObjectName("btnBrowseTitleSvg")
 
         self.layoutTitleSvg.addWidget(self.btnBrowseTitleSvg)
-
 
         self.formLayout.setLayout(6, QFormLayout.ItemRole.FieldRole, self.layoutTitleSvg)
 
         self.chkNewPage = QCheckBox(self.groupOptions)
-        self.chkNewPage.setObjectName(u"chkNewPage")
+        self.chkNewPage.setObjectName("chkNewPage")
 
         self.formLayout.setWidget(3, QFormLayout.ItemRole.FieldRole, self.chkNewPage)
-
 
         self.verticalLayout.addWidget(self.groupOptions)
 
         self.btnMerge = QPushButton(self.centralwidget)
-        self.btnMerge.setObjectName(u"btnMerge")
+        self.btnMerge.setObjectName("btnMerge")
 
         self.verticalLayout.addWidget(self.btnMerge)
 
         self.logGroupBox = QGroupBox(self.centralwidget)
-        self.logGroupBox.setObjectName(u"logGroupBox")
+        self.logGroupBox.setObjectName("logGroupBox")
         self.horizontalLayout = QHBoxLayout(self.logGroupBox)
-        self.horizontalLayout.setObjectName(u"horizontalLayout")
+        self.horizontalLayout.setObjectName("horizontalLayout")
         self.txtLog = QPlainTextEdit(self.logGroupBox)
-        self.txtLog.setObjectName(u"txtLog")
+        self.txtLog.setObjectName("txtLog")
         self.txtLog.setReadOnly(True)
 
         self.horizontalLayout.addWidget(self.txtLog)
-
 
         self.verticalLayout.addWidget(self.logGroupBox)
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.toolBar = QToolBar(MainWindow)
-        self.toolBar.setObjectName(u"toolBar")
+        self.toolBar.setObjectName("toolBar")
         MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar)
+        QWidget.setTabOrder(self.btnAddFiles, self.txtOutputName)
+        QWidget.setTabOrder(self.txtOutputName, self.btnBrowseOutputDir)
+        QWidget.setTabOrder(self.btnBrowseOutputDir, self.btnBrowseStyle)
+        QWidget.setTabOrder(self.btnBrowseStyle, self.chkNewPage)
+        QWidget.setTabOrder(self.chkNewPage, self.chkToc)
+        QWidget.setTabOrder(self.chkToc, self.txtTocName)
+        QWidget.setTabOrder(self.txtTocName, self.btnBrowseTitleSvg)
+        QWidget.setTabOrder(self.btnBrowseTitleSvg, self.btnMerge)
+        QWidget.setTabOrder(self.btnMerge, self.txtOutputDir)
+        QWidget.setTabOrder(self.txtOutputDir, self.txtStyle)
+        QWidget.setTabOrder(self.txtStyle, self.txtTitleSvg)
+        QWidget.setTabOrder(self.txtTitleSvg, self.btnClearFiles)
+        QWidget.setTabOrder(self.btnClearFiles, self.btnUp)
+        QWidget.setTabOrder(self.btnUp, self.btnDown)
+        QWidget.setTabOrder(self.btnDown, self.btnRemoveFiles)
+        QWidget.setTabOrder(self.btnRemoveFiles, self.fileList)
+        QWidget.setTabOrder(self.fileList, self.txtLog)
 
         self.toolBar.addAction(self.actionInfo)
 
         self.retranslateUi(MainWindow)
 
         QMetaObject.connectSlotsByName(MainWindow)
+
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MergeMuseScores", None))
-        self.actionInfo.setText(QCoreApplication.translate("MainWindow", u"Info", None))
-        self.fileGroupBox.setTitle(QCoreApplication.translate("MainWindow", u"MuseScore Files", None))
-        self.btnUp.setText(QCoreApplication.translate("MainWindow", u"Move Up", None))
-        self.btnRemoveFiles.setText(QCoreApplication.translate("MainWindow", u"Remove Selected", None))
-        self.btnDown.setText(QCoreApplication.translate("MainWindow", u"Move Down", None))
-        self.btnClearFiles.setText(QCoreApplication.translate("MainWindow", u"Clear", None))
-        self.btnAddFiles.setText(QCoreApplication.translate("MainWindow", u"Add Files", None))
-        self.groupOptions.setTitle(QCoreApplication.translate("MainWindow", u"Merge Options", None))
-        self.labelOutputName.setText(QCoreApplication.translate("MainWindow", u"Output Name", None))
-        self.labelOutputDir.setText(QCoreApplication.translate("MainWindow", u"Output Directory", None))
-        self.btnBrowseOutputDir.setText(QCoreApplication.translate("MainWindow", u"Browse...", None))
-        self.labelStyle.setText(QCoreApplication.translate("MainWindow", u"Style File", None))
-        self.btnBrowseStyle.setText(QCoreApplication.translate("MainWindow", u"Browse...", None))
-        self.chkToc.setText(QCoreApplication.translate("MainWindow", u"Generate Table of Contents", None))
-        self.labelTocName.setText(QCoreApplication.translate("MainWindow", u"TOC Title", None))
-        self.txtTocName.setText(QCoreApplication.translate("MainWindow", u"Table of Contents", None))
-        self.labelTitleSvg.setText(QCoreApplication.translate("MainWindow", u"Title Page SVG", None))
-        self.btnBrowseTitleSvg.setText(QCoreApplication.translate("MainWindow", u"Browse...", None))
-        self.chkNewPage.setText(QCoreApplication.translate("MainWindow", u"Insert Page Break Between Scores", None))
-        self.btnMerge.setText(QCoreApplication.translate("MainWindow", u"Merge Scores", None))
-        self.logGroupBox.setTitle(QCoreApplication.translate("MainWindow", u"Log Output", None))
-        self.toolBar.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar", None))
-    # retranslateUi
+        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", "MergeMuseScores", None))
+        self.actionInfo.setText(QCoreApplication.translate("MainWindow", "Info", None))
+        self.fileGroupBox.setTitle(QCoreApplication.translate("MainWindow", "MuseScore Files", None))
+        self.btnUp.setText(QCoreApplication.translate("MainWindow", "Move Up", None))
+        self.btnRemoveFiles.setText(QCoreApplication.translate("MainWindow", "Remove Selected", None))
+        self.btnDown.setText(QCoreApplication.translate("MainWindow", "Move Down", None))
+        self.btnClearFiles.setText(QCoreApplication.translate("MainWindow", "Clear", None))
+        self.btnAddFiles.setText(QCoreApplication.translate("MainWindow", "Add Files", None))
+        self.groupOptions.setTitle(QCoreApplication.translate("MainWindow", "Merge Options", None))
+        self.labelOutputName.setText(QCoreApplication.translate("MainWindow", "Output Name", None))
+        self.labelOutputDir.setText(QCoreApplication.translate("MainWindow", "Output Directory", None))
+        self.btnBrowseOutputDir.setText(QCoreApplication.translate("MainWindow", "Browse...", None))
+        self.labelStyle.setText(QCoreApplication.translate("MainWindow", "Style File", None))
+        self.btnBrowseStyle.setText(QCoreApplication.translate("MainWindow", "Browse...", None))
+        self.chkToc.setText(QCoreApplication.translate("MainWindow", "Generate Table of Contents", None))
+        self.labelTocName.setText(QCoreApplication.translate("MainWindow", "TOC Title", None))
+        self.txtTocName.setText(QCoreApplication.translate("MainWindow", "Table of Contents", None))
+        self.labelTitleSvg.setText(QCoreApplication.translate("MainWindow", "Title Page SVG", None))
+        self.btnBrowseTitleSvg.setText(QCoreApplication.translate("MainWindow", "Browse...", None))
+        self.chkNewPage.setText(QCoreApplication.translate("MainWindow", "Insert Page Break Between Scores", None))
+        self.btnMerge.setText(QCoreApplication.translate("MainWindow", "Merge Scores", None))
+        self.logGroupBox.setTitle(QCoreApplication.translate("MainWindow", "Log Output", None))
+        self.toolBar.setWindowTitle(QCoreApplication.translate("MainWindow", "toolBar", None))
 
+    # retranslateUi

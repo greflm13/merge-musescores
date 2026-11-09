@@ -253,6 +253,26 @@
    </property>
   </action>
  </widget>
+ <tabstops>
+  <tabstop>btnAddFiles</tabstop>
+  <tabstop>txtOutputName</tabstop>
+  <tabstop>btnBrowseOutputDir</tabstop>
+  <tabstop>btnBrowseStyle</tabstop>
+  <tabstop>chkNewPage</tabstop>
+  <tabstop>chkToc</tabstop>
+  <tabstop>txtTocName</tabstop>
+  <tabstop>btnBrowseTitleSvg</tabstop>
+  <tabstop>btnMerge</tabstop>
+  <tabstop>txtOutputDir</tabstop>
+  <tabstop>txtStyle</tabstop>
+  <tabstop>txtTitleSvg</tabstop>
+  <tabstop>btnClearFiles</tabstop>
+  <tabstop>btnUp</tabstop>
+  <tabstop>btnDown</tabstop>
+  <tabstop>btnRemoveFiles</tabstop>
+  <tabstop>fileList</tabstop>
+  <tabstop>txtLog</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
